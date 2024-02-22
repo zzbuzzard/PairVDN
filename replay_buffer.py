@@ -42,15 +42,20 @@ class ExperienceBuffer:
             self.index %= self.length
 
 
-def batched_dataloader(buffer: ExperienceBuffer, batch_size: int, shuffle: bool = True, drop_last: bool = False):
+def batched_dataloader(buffer: ExperienceBuffer, batch_size: int, shuffle: bool = True, drop_last: bool = False,
+                       repeat: bool = False):
     """
     This generator shuffles and loads experiences from an ExperienceBuffer. Shuffling is naive and not at all cache
     friendly.
     """
     nkeys = len(buffer.keys)
-    while True:
+
+    while repeat:
         max_ind = len(buffer)  # exclusive
-        indices = np.random.permutation(max_ind)
+        if shuffle:
+            indices = np.random.permutation(max_ind)
+        else:
+            indices = np.arange(max_ind)
 
         for i in range(0, max_ind, batch_size):
             j = min(i + batch_size, max_ind)
