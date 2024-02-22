@@ -36,7 +36,8 @@ for _ in range(1000):
     if len(infos) > 0:
         finished = np.logical_or(terminated, truncated)
         # Note: we don't want to *modify* next_states, as we need the start states for the reset things to be kept
-        next_states_without_restart = np.where(finished, infos["final_observation"], next_states)
+        next_states_without_restart = next_states.copy()
+        next_states_without_restart[finished] = np.vstack(infos["final_observation"][finished])
     else:
         next_states_without_restart = next_states
 
