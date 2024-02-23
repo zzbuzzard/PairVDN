@@ -29,7 +29,7 @@ class QMLP(eqx.Module):
             layers.append(nn.Linear(sizes[i], sizes[i+1], key=key2))
             layers.append(activation)
 
-        self.layers = layers[:-1]  # remove final activation
+        self.layers = layers[:-1]  # remove trailing activation
 
     def __call__(self, x):
         for f in self.layers:

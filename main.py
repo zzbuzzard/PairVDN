@@ -14,6 +14,7 @@ from replay_buffer import ExperienceBuffer, batched_dataloader
 from network import QMLP
 from policy import Policy, QPolicy, EpsPolicy
 from config import Config, QMLPConfig
+import util
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-r", "--root", type=str, required=True, help="Path to root directory containing config.json")
@@ -134,6 +135,9 @@ for epoch in it:
     avg_loss = sum(epoch_losses) / len(epoch_losses)
     it.set_description(f"Loss = {avg_loss:.2f}")
 
+    if epoch > 0 and epoch % config.save_every == 0:
+        util.save_model(root_dir, model)
+
     if epoch > 0 and epoch % config.display_every == 0:
         q_policy = QPolicy(envs.single_action_space, model)
         q_policy.get_action = eqx.filter_jit(q_policy.get_action)
@@ -147,5 +151,8 @@ for epoch in it:
             if terminated or truncated:
                 state, _ = env.reset()
         env.close()
+
+# Save final model
+util.save_model(root_dir, model)
 
 envs.close()

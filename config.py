@@ -29,6 +29,7 @@ class Config:
     num_epochs: int = 100
     learning_rate: float = 1e-4
     display_every: int = 20
+    save_every: int = 20
 
     # RL training params
     exp_buffer_len: int = 100000
