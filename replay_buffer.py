@@ -50,7 +50,7 @@ def batched_dataloader(buffer: ExperienceBuffer, batch_size: int, shuffle: bool 
     """
     nkeys = len(buffer.keys)
 
-    while repeat:
+    while True:
         max_ind = len(buffer)  # exclusive
         if shuffle:
             indices = np.random.permutation(max_ind)
@@ -66,3 +66,6 @@ def batched_dataloader(buffer: ExperienceBuffer, batch_size: int, shuffle: bool 
             inds = indices[i:j]
 
             yield {buffer.keys[i]: buffer.data[i][inds] for i in range(nkeys)}
+
+        if not repeat:
+            return
