@@ -23,7 +23,7 @@ class QPolicy(Policy):
 
     def get_action(self, states, key):
         q_vals = jax.vmap(self.network)(states)
-        return jnp.argmax(q_vals, axis=0)
+        return jnp.argmax(q_vals, axis=1)
 
 
 class EpsPolicy(Policy):

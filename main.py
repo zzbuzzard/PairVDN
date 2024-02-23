@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from replay_buffer import ExperienceBuffer, batched_dataloader
 from network import QMLP
+from policy import Policy, QPolicy, EpsPolicy
 
 # TODO: Cmd line args, or config
 exp_buffer_len = 100000
@@ -22,18 +23,20 @@ num_epochs = 100
 mlp_layers = [256, 256]
 gamma = 0.99
 learning_rate = 1e-4
+exploration_eps = 0.05
 
 num_runs = 0
 
 
-def collect_data(envs: gym.Env, policy, buffer: ExperienceBuffer, steps: int):
+def collect_data(key, envs: gym.Env, policy: Policy, buffer: ExperienceBuffer, steps: int):
     global num_runs
     states, info = envs.reset(seed=seed + num_runs)
     num_runs += 1
 
     for _ in range(steps):
-        # TODO: use Policy
-        actions = envs.action_space.sample()
+        key, k1 = random.split(key)
+        actions = policy.get_action(states, k1)
+        actions = np.array(actions)
 
         next_states, rewards, terminated, truncated, infos = envs.step(actions)
 
@@ -50,6 +53,8 @@ def collect_data(envs: gym.Env, policy, buffer: ExperienceBuffer, steps: int):
         buffer.add_experiences(state=states, next_state=next_states_without_restart, action=actions, reward=rewards)
 
         states = next_states
+
+    return key
 
 
 def loss_single(model: eqx.Module, s0, s1, a, r):
@@ -107,8 +112,13 @@ opt_state = opt.init(eqx.filter(model, eqx.is_array))
 
 it = tqdm(range(num_epochs))
 for epoch in it:
+    q_policy = QPolicy(envs.single_action_space, model)
+    q_policy.get_action = eqx.filter_jit(q_policy.get_action)
+
+    eps_policy = EpsPolicy(envs.single_action_space, q_policy, exploration_eps)
+
     # Collect some nice fresh data
-    collect_data(envs, None, buffer, simulation_steps_per_epoch)
+    key = collect_data(key, envs, eps_policy, buffer, simulation_steps_per_epoch)
 
     dl = batched_dataloader(buffer, batch_size=batch_size, drop_last=True)
 
