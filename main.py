@@ -107,6 +107,7 @@ buffer = ExperienceBuffer(config.exp_buffer_len,
                           key_dtypes=[np.float32, np.float32, np.int64, np.float32])
 
 # Load model
+np.random.seed(config.seed)
 key = random.PRNGKey(config.seed)
 key, k1 = random.split(key)
 model = config.get_model(state_shape[0], envs.single_action_space.n, k1)
