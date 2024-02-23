@@ -32,8 +32,6 @@ class QMLP(eqx.Module):
         self.layers = layers[:-1]  # remove final activation
 
     def __call__(self, x):
-        x = jnp.sin(x * self.w)
-        x = self.lin1(x)
-        x = jax.nn.relu(x)
-        x = self.lin2(x)
+        for f in self.layers:
+            x = f(x)
         return x
