@@ -37,47 +37,51 @@ def collect_data(key, envs: gym.Env, policy: Policy, buffer: ExperienceBuffer, s
 
         # The vector environment automatically resets environments when they finish. To prevent next_state = the new start
         #  state, we have to use the "final_observation" field in the info dict.
-        if len(infos) > 0:
-            finished = np.logical_or(terminated, truncated)
-            # Note: we don't want to *modify* next_states, as we need the start states for the reset things to be kept
-            next_states_without_restart = next_states.copy()
-            next_states_without_restart[finished] = np.vstack(infos["final_observation"][finished])
-        else:
-            next_states_without_restart = next_states
+        # if len(infos) > 0:
+        #     finished = np.logical_or(terminated, truncated)
+        #     # Note: we don't want to *modify* next_states, as we need the start states for the reset things to be kept
+        #     next_states_without_restart = next_states.copy()
+        #     next_states_without_restart[finished] = np.vstack(infos["final_observation"][finished])
+        # else:
+        #     next_states_without_restart = next_states
+        #     finished = np.zeros(())
+        terminal = np.logical_or(terminated, truncated)
 
-        buffer.add_experiences(state=states, next_state=next_states_without_restart, action=actions, reward=rewards)
+        # Note: next_state is *invalid* when terminal=true, as it actually gives the starting state for the next run.
+        #  however, the DQN loss function does not use the next state when terminal=true so this is ok.
+        buffer.add_experiences(state=states, next_state=next_states, action=actions, reward=rewards, terminal=terminal)
 
         states = next_states
 
     return key
 
 
-def loss_single(model: eqx.Module, s0, s1, a, r):
+def loss_single(model: eqx.Module, s0, s1, a, r, d):
     """Computes loss on *non-batched* data"""
     a0_scores = model(s0)
     q1 = a0_scores[a]
 
     a1_scores = model(s1)
     q_max = jnp.max(a1_scores)
-    q2 = r + config.gamma * q_max
+    q2 = r + (1 - d) * config.gamma * q_max  # 1 - d -> nullifies when d=1
 
     return (q1 - q2) ** 2
 
 
-loss_batched = jax.vmap(loss_single, in_axes=(None, 0, 0, 0, 0))
+loss_batched = jax.vmap(loss_single, in_axes=(None, 0, 0, 0, 0, 0))
 
 
 @eqx.filter_value_and_grad
-def loss_fn(model, s0, s1, a, r):
+def loss_fn(model, s0, s1, a, r, d):
     """Computes loss on batched data"""
-    losses = loss_batched(model, s0, s1, a, r)
+    losses = loss_batched(model, s0, s1, a, r, d)
     return jnp.mean(losses)
 
 
 @eqx.filter_jit
-def train_step(model: eqx.Module, opt_state, s0, s1, a, r):
+def train_step(model: eqx.Module, opt_state, s0, s1, a, r, d):
     # Note: operates on batched data!
-    loss_val, grad = loss_fn(model, s0, s1, a, r)
+    loss_val, grad = loss_fn(model, s0, s1, a, r, d)
     updates, opt_state = opt.update(grad, opt_state, model)
     model = eqx.apply_updates(model, updates)
     return model, opt_state, loss_val
@@ -102,9 +106,9 @@ envs = gym.vector.make(config.env, config.num_envs, asynchronous=True)
 state_shape = envs.single_observation_space.sample().shape
 action_shape = envs.single_action_space.sample().shape
 buffer = ExperienceBuffer(config.exp_buffer_len,
-                          keys=["state", "next_state", "action", "reward"],
-                          key_shapes=[state_shape, state_shape, action_shape, tuple()],
-                          key_dtypes=[np.float32, np.float32, np.int64, np.float32])
+                          keys=["state", "next_state", "action", "reward", "terminal"],
+                          key_shapes=[state_shape, state_shape, action_shape, tuple(), tuple()],
+                          key_dtypes=[np.float32, np.float32, np.int64, np.float32, np.bool_])
 
 # Load model
 np.random.seed(config.seed)
@@ -141,8 +145,9 @@ for epoch in it:
         s1 = jnp.asarray(batch["next_state"])
         a = jnp.asarray(batch["action"])
         r = jnp.asarray(batch["reward"])
+        d = jnp.asarray(batch["terminal"]).astype(np.float32)
 
-        model, opt_state, loss_val = train_step(model, opt_state, s0, s1, a, r)
+        model, opt_state, loss_val = train_step(model, opt_state, s0, s1, a, r, d)
         epoch_losses.append(loss_val.item())
 
     avg_loss = sum(epoch_losses) / len(epoch_losses)
