@@ -11,9 +11,8 @@ import argparse
 from os.path import join
 
 from replay_buffer import ExperienceBuffer, batched_dataloader
-from network import QMLP
 from policy import Policy, QPolicy, EpsPolicy
-from config import Config, QMLPConfig
+from config import Config
 import util
 
 parser = argparse.ArgumentParser()
@@ -111,7 +110,7 @@ opt_state = opt.init(eqx.filter(model, eqx.is_array))
 
 it = tqdm(range(config.num_epochs))
 for epoch in it:
-    q_policy = QPolicy(envs.single_action_space, model)
+    q_policy = QPolicy(model)
     q_policy.get_action = eqx.filter_jit(q_policy.get_action)
 
     eps = config.get_eps(epoch)
@@ -139,7 +138,7 @@ for epoch in it:
         util.save_model(root_dir, model)
 
     if epoch > 0 and epoch % config.display_every == 0:
-        q_policy = QPolicy(envs.single_action_space, model)
+        q_policy = QPolicy(model)
         q_policy.get_action = eqx.filter_jit(q_policy.get_action)
 
         env = gym.make(config.env, render_mode="human")

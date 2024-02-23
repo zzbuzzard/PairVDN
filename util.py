@@ -13,7 +13,6 @@ def load_model(root_path: str, model: eqx.Module) -> eqx.Module:
     path = join(root_path, "model.eqx")
     if isfile(path):
         print("Deserialising from", path)
-        eqx.tree_serialise_leaves(path, model)
         return eqx.tree_deserialise_leaves(path, model)
     else:
         print(path, "does not exist, not loading model")

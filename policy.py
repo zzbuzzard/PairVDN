@@ -7,9 +7,6 @@ from abc import ABC, abstractmethod
 
 class Policy(ABC):
     """Abstract policy which acts on batches of states. Action_space should be the *single* action space."""
-    def __init__(self, action_space: gym.Space):
-        self.action_space = action_space
-
     @abstractmethod
     def get_action(self, states, key):
         """Returns batch of actions"""
@@ -17,8 +14,7 @@ class Policy(ABC):
 
 
 class QPolicy(Policy):
-    def __init__(self, action_space: gym.Space, network):
-        super().__init__(action_space)
+    def __init__(self, network):
         self.network = network
 
     def get_action(self, states, key):
@@ -28,7 +24,7 @@ class QPolicy(Policy):
 
 class EpsPolicy(Policy):
     def __init__(self, action_space: gym.Space, policy: Policy, eps: float):
-        super().__init__(action_space)
+        self.action_space = action_space
         self.policy = policy
         self.eps = eps
 
