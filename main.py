@@ -7,31 +7,29 @@ import equinox as eqx
 from optax import adam
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import argparse
+from os.path import join
 
 from replay_buffer import ExperienceBuffer, batched_dataloader
 from network import QMLP
 from policy import Policy, QPolicy, EpsPolicy
+from config import Config, QMLPConfig
 
-# TODO: Cmd line args, or config
-exp_buffer_len = 100000
-batch_size = 32
-num_envs = 16
-name = "LunarLander-v2"
-seed = 0
-simulation_steps_per_epoch = 1000  # creates simulation_steps_per_epoch * num_envs datapoints
-num_epochs = 100
-mlp_layers = [256, 256]
-gamma = 0.99
-learning_rate = 1e-4
-exploration_eps = 0.1
-display_every = 20
+parser = argparse.ArgumentParser()
+parser.add_argument("-r", "--root", type=str, required=True, help="Path to root directory containing config.json")
+
+args = parser.parse_args()
+
+# Load config from config.json
+root_dir = join("models", args.root)
+config = Config.load(root_dir)
 
 num_runs = 0
 
 
 def collect_data(key, envs: gym.Env, policy: Policy, buffer: ExperienceBuffer, steps: int):
     global num_runs
-    states, info = envs.reset(seed=seed + num_runs)
+    states, info = envs.reset(seed=config.seed + num_runs)
     num_runs += 1
 
     for _ in range(steps):
@@ -65,7 +63,7 @@ def loss_single(model: eqx.Module, s0, s1, a, r):
 
     a1_scores = model(s1)
     q_max = jnp.max(a1_scores)
-    q2 = r + gamma * q_max
+    q2 = r + config.gamma * q_max
 
     return (q1 - q2) ** 2
 
@@ -89,38 +87,39 @@ def train_step(model: eqx.Module, opt_state, s0, s1, a, r):
     return model, opt_state, loss_val
 
 
-envs = gym.vector.make(name, num_envs, asynchronous=False)  # TODO: Turn on Async once everything else is working
+envs = gym.vector.make(config.env, config.num_envs, asynchronous=True)
 
 state_shape = envs.single_observation_space.sample().shape
 action_shape = envs.single_action_space.sample().shape
-buffer = ExperienceBuffer(exp_buffer_len,
+buffer = ExperienceBuffer(config.exp_buffer_len,
                           keys=["state", "next_state", "action", "reward"],
                           key_shapes=[state_shape, state_shape, action_shape, tuple()],
                           key_dtypes=[np.float32, np.float32, np.int64, np.float32])
 
 # Load model
-key = random.PRNGKey(seed)
-key, skey = random.split(key)
-model = QMLP(input_dim=state_shape[0], output_dim=envs.single_action_space.n, hidden_layers=mlp_layers, key=skey)
+key = random.PRNGKey(config.seed)
+key, k1 = random.split(key)
+model = config.get_model(state_shape[0], envs.single_action_space.n, k1)
 print("Model:")
 print(model)
 print()
 
 # Load optimiser
-opt = adam(learning_rate)
+opt = adam(config.learning_rate)
 opt_state = opt.init(eqx.filter(model, eqx.is_array))
 
-it = tqdm(range(num_epochs))
+it = tqdm(range(config.num_epochs))
 for epoch in it:
     q_policy = QPolicy(envs.single_action_space, model)
     q_policy.get_action = eqx.filter_jit(q_policy.get_action)
 
-    eps_policy = EpsPolicy(envs.single_action_space, q_policy, exploration_eps)
+    eps = config.get_eps(epoch)
+    eps_policy = EpsPolicy(envs.single_action_space, q_policy, eps)
 
     # Collect some nice fresh data
-    key = collect_data(key, envs, eps_policy, buffer, simulation_steps_per_epoch)
+    key = collect_data(key, envs, eps_policy, buffer, config.simulation_steps_per_epoch)
 
-    dl = batched_dataloader(buffer, batch_size=batch_size, drop_last=True)
+    dl = batched_dataloader(buffer, batch_size=config.batch_size, drop_last=True)
 
     epoch_losses = []
     for batch in dl:
@@ -135,11 +134,11 @@ for epoch in it:
     avg_loss = sum(epoch_losses) / len(epoch_losses)
     it.set_description(f"Loss = {avg_loss:.2f}")
 
-    if epoch > 0 and epoch % display_every == 0:
+    if epoch > 0 and epoch % config.display_every == 0:
         q_policy = QPolicy(envs.single_action_space, model)
         q_policy.get_action = eqx.filter_jit(q_policy.get_action)
 
-        env = gym.make(name, render_mode="human")
+        env = gym.make(config.env, render_mode="human")
         state, _ = env.reset(seed=epoch)
         for _ in range(1000):
             action = q_policy.get_action(state[None], key)[0]
