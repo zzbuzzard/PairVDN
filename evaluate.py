@@ -4,6 +4,7 @@ import numpy as np
 import equinox as eqx
 import argparse
 from os.path import join
+import pickle
 
 from replay_buffer import ExperienceBuffer, batched_dataloader
 from policy import Policy, QPolicy, EpsPolicy
@@ -94,6 +95,11 @@ if __name__ == "__main__":
 
     q_policy = QPolicy(model)
     q_policy.get_action = eqx.filter_jit(q_policy.get_action)
+
+    # Load stats
+    stats = pickle.load(open(join(root_dir, "stats.pickle"), "rb"))
+    util.plot_reward(stats)
+    util.plot_loss(stats)
 
     # TODO: cmd line arg
     reps = 20

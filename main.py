@@ -9,11 +9,13 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import argparse
 from os.path import join
+import pickle
 
 from replay_buffer import ExperienceBuffer, batched_dataloader
 from policy import Policy, QPolicy, EpsPolicy
 from config import Config
 import util
+import evaluate
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-r", "--root", type=str, required=True, help="Path to root directory containing config.json")
@@ -108,6 +110,9 @@ print()
 opt = adam(config.learning_rate)
 opt_state = opt.init(eqx.filter(model, eqx.is_array))
 
+# Track training stats
+stats = {"avg_reward": {}, "std_reward": {}, "loss": {}}
+
 it = tqdm(range(config.num_epochs))
 for epoch in it:
     q_policy = QPolicy(model)
@@ -134,6 +139,8 @@ for epoch in it:
     avg_loss = sum(epoch_losses) / len(epoch_losses)
     it.set_description(f"Loss = {avg_loss:.2f}")
 
+    stats["loss"][epoch] = avg_loss
+
     if epoch > 0 and epoch % config.save_every == 0:
         util.save_model(root_dir, model)
 
@@ -151,7 +158,22 @@ for epoch in it:
                 state, _ = env.reset()
         env.close()
 
+    if epoch > 0 and epoch % config.eval_every == 0:
+        q_policy = QPolicy(model)
+        q_policy.get_action = eqx.filter_jit(q_policy.get_action)
+
+        avg_reward, std_reward = evaluate.evaluate(config, seed=epoch, policy=q_policy, repeats=config.eval_reps)
+        stats["avg_reward"][epoch] = avg_reward
+        stats["std_reward"][epoch] = std_reward
+
+
 # Save final model
 util.save_model(root_dir, model)
 
 envs.close()
+
+# Save stats
+pickle.dump(stats, open(join(root_dir, "stats.pickle"), "wb"))
+
+util.plot_reward(stats)
+util.plot_loss(stats)

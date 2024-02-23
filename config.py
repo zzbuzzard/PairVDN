@@ -30,6 +30,8 @@ class Config:
     learning_rate: float = 1e-4
     display_every: int = 20
     save_every: int = 20
+    eval_every: int = 5
+    eval_reps: int = 8
 
     # RL training params
     exp_buffer_len: int = 100000
