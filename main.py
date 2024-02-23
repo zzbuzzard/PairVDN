@@ -1,9 +1,15 @@
 import gymnasium as gym
-from whatis import whatis as wi
 import jax
+from jax import random
 import jax.numpy as jnp
 import numpy as np
+import equinox as eqx
+from optax import adam
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+
 from replay_buffer import ExperienceBuffer, batched_dataloader
+from network import QMLP
 
 # TODO: Cmd line args, or config
 exp_buffer_len = 100000
@@ -13,6 +19,9 @@ name = "LunarLander-v2"
 seed = 0
 simulation_steps_per_epoch = 1000  # creates simulation_steps_per_epoch * num_envs datapoints
 num_epochs = 100
+mlp_layers = [256, 256]
+gamma = 0.99
+learning_rate = 1e-4
 
 num_runs = 0
 
@@ -43,19 +52,78 @@ def collect_data(envs: gym.Env, policy, buffer: ExperienceBuffer, steps: int):
         states = next_states
 
 
+def loss_single(model: eqx.Module, s0, s1, a, r):
+    """Computes loss on *non-batched* data"""
+    a0_scores = model(s0)
+    q1 = a0_scores[a]
+
+    a1_scores = model(s1)
+    q_max = jnp.max(a1_scores)
+    q2 = r + gamma * q_max
+
+    return (q1 - q2) ** 2
+
+
+loss_batched = jax.vmap(loss_single, in_axes=(None, 0, 0, 0, 0))
+
+
+@eqx.filter_value_and_grad
+def loss_fn(model, s0, s1, a, r):
+    """Computes loss on batched data"""
+    losses = loss_batched(model, s0, s1, a, r)
+    return jnp.mean(losses)
+
+
+@eqx.filter_jit
+def train_step(model: eqx.Module, opt_state, s0, s1, a, r):
+    # Note: operates on batched data!
+    loss_val, grad = loss_fn(model, s0, s1, a, r)
+    updates, opt_state = opt.update(grad, opt_state, model)
+    model = eqx.apply_updates(model, updates)
+    return model, opt_state, loss_val
+
+
 # env = gym.make(name, render_mode="human")
 envs = gym.vector.make(name, num_envs, asynchronous=False)  # TODO: Turn on Async once everything else is working
 
 state_shape = envs.single_observation_space.sample().shape
-action_shape = envs.action_space.sample().shape
+action_shape = envs.single_action_space.sample().shape
 buffer = ExperienceBuffer(exp_buffer_len,
                           keys=["state", "next_state", "action", "reward"],
                           key_shapes=[state_shape, state_shape, action_shape, tuple()],
                           key_dtypes=[np.float32, np.float32, np.int64, np.float32])
 
-for epoch in range(num_epochs):
+# Load model
+key = random.PRNGKey(seed)
+key, skey = random.split(key)
+model = QMLP(input_dim=state_shape[0], output_dim=envs.single_action_space.n, hidden_layers=mlp_layers, key=skey)
+print("Model:")
+print(model)
+print()
+
+# Load optimiser
+opt = adam(learning_rate)
+opt_state = opt.init(eqx.filter(model, eqx.is_array))
+
+it = tqdm(range(num_epochs))
+for epoch in it:
     # Collect some nice fresh data
     collect_data(envs, None, buffer, simulation_steps_per_epoch)
-    
+
+    dl = batched_dataloader(buffer, batch_size=batch_size, drop_last=True)
+
+    epoch_losses = []
+    for batch in dl:
+        s0 = jnp.asarray(batch["state"])
+        s1 = jnp.asarray(batch["next_state"])
+        a = jnp.asarray(batch["action"])
+        r = jnp.asarray(batch["reward"])
+
+        model, opt_state, loss_val = train_step(model, opt_state, s0, s1, a, r)
+        epoch_losses.append(loss_val.item())
+
+    avg_loss = sum(epoch_losses) / len(epoch_losses)
+    it.set_description(f"Loss = {avg_loss:.2f}")
+
 
 envs.close()
