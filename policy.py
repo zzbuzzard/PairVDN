@@ -12,7 +12,7 @@ class Policy(ABC):
 
     @abstractmethod
     def get_action(self, states, key):
-        """Returns actions and new key"""
+        """Returns batch of actions"""
         raise NotImplementedError
 
 

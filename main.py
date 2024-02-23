@@ -23,7 +23,8 @@ num_epochs = 100
 mlp_layers = [256, 256]
 gamma = 0.99
 learning_rate = 1e-4
-exploration_eps = 0.05
+exploration_eps = 0.1
+display_every = 20
 
 num_runs = 0
 
@@ -88,7 +89,6 @@ def train_step(model: eqx.Module, opt_state, s0, s1, a, r):
     return model, opt_state, loss_val
 
 
-# env = gym.make(name, render_mode="human")
 envs = gym.vector.make(name, num_envs, asynchronous=False)  # TODO: Turn on Async once everything else is working
 
 state_shape = envs.single_observation_space.sample().shape
@@ -135,5 +135,18 @@ for epoch in it:
     avg_loss = sum(epoch_losses) / len(epoch_losses)
     it.set_description(f"Loss = {avg_loss:.2f}")
 
+    if epoch > 0 and epoch % display_every == 0:
+        q_policy = QPolicy(envs.single_action_space, model)
+        q_policy.get_action = eqx.filter_jit(q_policy.get_action)
+
+        env = gym.make(name, render_mode="human")
+        state, _ = env.reset(seed=epoch)
+        for _ in range(1000):
+            action = q_policy.get_action(state[None], key)[0]
+            action = np.array(action)
+            state, reward, terminated, truncated, _ = env.step(action)
+            if terminated or truncated:
+                state, _ = env.reset()
+        env.close()
 
 envs.close()
