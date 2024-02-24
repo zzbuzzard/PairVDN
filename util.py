@@ -20,6 +20,17 @@ def load_model(root_path: str, model: eqx.Module) -> eqx.Module:
         return model
 
 
+def tree_zip_map(f, tree1, tree2):
+    """
+    For two trees with the *same shape*, constructs a new tree where each leaf is a function of the two corresponding
+    leaves.
+    """
+    flat1, treedef = jax.tree_flatten(tree1)
+    flat2, _ = jax.tree_flatten(tree2)
+    flat_out = [f(i, j) for i, j in zip(flat1, flat2)]
+    return jax.tree_unflatten(treedef, flat_out)
+
+
 def plot_reward(stats):
     epochs = sorted(stats["avg_reward"])
     rewards = [stats["avg_reward"][i] for i in epochs]

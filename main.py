@@ -18,6 +18,7 @@ from policy import Policy, QPolicy, EpsPolicy
 from config import Config
 import util
 import evaluate
+from target_network import TargetNetwork
 
 
 num_runs = 0
@@ -56,32 +57,32 @@ def collect_data(key, envs: gym.Env, policy: Policy, buffer: ExperienceBuffer, s
     return key
 
 
-def loss_single(model: eqx.Module, s0, s1, a, r, d):
+def loss_single(model: eqx.Module, target_model: eqx.Module, s0, s1, a, r, d):
     """Computes loss on *non-batched* data"""
     a0_scores = model(s0)
     q1 = a0_scores[a]
 
-    a1_scores = model(s1)
+    a1_scores = target_model(s1)
     q_max = jnp.max(a1_scores)
     q2 = r + (1 - d) * config.gamma * q_max  # 1 - d -> nullifies when d=1
 
     return (q1 - q2) ** 2
 
 
-loss_batched = jax.vmap(loss_single, in_axes=(None, 0, 0, 0, 0, 0))
+loss_batched = jax.vmap(loss_single, in_axes=(None, None, 0, 0, 0, 0, 0))
 
 
 @eqx.filter_value_and_grad
-def loss_fn(model, s0, s1, a, r, d):
+def loss_fn(model, target_model, s0, s1, a, r, d):
     """Computes loss on batched data"""
-    losses = loss_batched(model, s0, s1, a, r, d)
+    losses = loss_batched(model, target_model, s0, s1, a, r, d)
     return jnp.mean(losses)
 
 
 @eqx.filter_jit
-def train_step(model: eqx.Module, opt_state, s0, s1, a, r, d):
+def train_step(model: eqx.Module, opt_state, target_model: eqx.Module, s0, s1, a, r, d):
     # Note: operates on batched data!
-    loss_val, grad = loss_fn(model, s0, s1, a, r, d)
+    loss_val, grad = loss_fn(model, target_model, s0, s1, a, r, d)
     updates, opt_state = opt.update(grad, opt_state, model)
     model = eqx.apply_updates(model, updates)
     return model, opt_state, loss_val
@@ -119,6 +120,8 @@ print("Model:")
 print(model)
 print()
 
+target_model = TargetNetwork(model, config.target_network_gamma)
+
 # Load optimiser
 opt = adam(config.learning_rate)
 opt_state = opt.init(eqx.filter(model, eqx.is_array))
@@ -147,8 +150,10 @@ for epoch in it:
         r = jnp.asarray(batch["reward"])
         d = jnp.asarray(batch["terminal"]).astype(np.float32)
 
-        model, opt_state, loss_val = train_step(model, opt_state, s0, s1, a, r, d)
+        model, opt_state, loss_val = train_step(model, opt_state, target_model.network, s0, s1, a, r, d)
         epoch_losses.append(loss_val.item())
+
+        target_model.update(model)
 
     avg_loss = sum(epoch_losses) / len(epoch_losses)
     it.set_description(f"Loss = {avg_loss:.2f}")

@@ -36,6 +36,7 @@ class Config:
     # RL training params
     exp_buffer_len: int = 100000
     gamma: float = 0.99
+    target_network_gamma: float = 0.99
     exploration_eps_start: float = 1.0
     exploration_eps_end: float = 0.05
     simulation_steps_per_epoch: int = 1000  # creates simulation_steps_per_epoch * num_envs datapoints
