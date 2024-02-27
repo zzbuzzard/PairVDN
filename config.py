@@ -41,6 +41,7 @@ class Config:
     exploration_eps_end: float = 0.05
     simulation_steps_per_epoch: int = 1000  # creates simulation_steps_per_epoch * num_envs datapoints
     num_envs: int = 16
+    final_layer_small_init: bool = False
 
     @staticmethod
     def load(root_path: str):
@@ -63,7 +64,7 @@ class Config:
 
     def get_model(self, input_dim, output_dim, key):
         if self.model_type == "QMLP":
-            return QMLP(input_dim, output_dim, self.model_config.hidden_layers, key)
+            return QMLP(input_dim, output_dim, self.model_config.hidden_layers, self.final_layer_small_init, key)
         else:
             raise NotImplementedError(f"Unknown model '{self.model_type}'.")
 
