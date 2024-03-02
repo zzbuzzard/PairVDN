@@ -6,7 +6,6 @@ import argparse
 from os.path import join
 import pickle
 
-from replay_buffer import ExperienceBuffer, batched_dataloader
 from policy import Policy, QPolicy, EpsPolicy
 from config import Config, QMLPConfig
 import util

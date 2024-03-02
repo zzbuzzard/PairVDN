@@ -36,17 +36,7 @@ def collect_data(key, envs: gym.Env, policy: Policy, buffer: ExperienceBuffer, s
 
         next_states, rewards, terminated, truncated, infos = envs.step(actions)
 
-        # The vector environment automatically resets environments when they finish. To prevent next_state = the new start
-        #  state, we have to use the "final_observation" field in the info dict.
-        # if len(infos) > 0:
-        #     finished = np.logical_or(terminated, truncated)
-        #     # Note: we don't want to *modify* next_states, as we need the start states for the reset things to be kept
-        #     next_states_without_restart = next_states.copy()
-        #     next_states_without_restart[finished] = np.vstack(infos["final_observation"][finished])
-        # else:
-        #     next_states_without_restart = next_states
-        #     finished = np.zeros(())
-        terminal = np.logical_or(terminated, truncated)
+        terminal = np.logical_or(terminated, truncated)  # 'd' flag for each environment
 
         # Note: next_state is *invalid* when terminal=true, as it actually gives the starting state for the next run.
         #  however, the DQN loss function does not use the next state when terminal=true so this is ok.
@@ -81,7 +71,6 @@ def loss_fn(model, target_model, s0, s1, a, r, d):
 
 @eqx.filter_jit
 def train_step(model: eqx.Module, opt_state, target_model: eqx.Module, s0, s1, a, r, d):
-    # Note: operates on batched data!
     loss_val, grad = loss_fn(model, target_model, s0, s1, a, r, d)
     updates, opt_state = opt.update(grad, opt_state, model)
     model = eqx.apply_updates(model, updates)
