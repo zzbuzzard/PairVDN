@@ -77,115 +77,116 @@ def train_step(model: eqx.Module, opt_state, target_model: eqx.Module, s0, s1, a
     return model, opt_state, loss_val
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument("-r", "--root", type=str, required=True, help="Path to root directory containing config.json")
-args = parser.parse_args()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-r", "--root", type=str, required=True, help="Path to root directory containing config.json")
+    args = parser.parse_args()
 
-# Load config from config.json
-root_dir = join("models", args.root)
-config = Config.load(root_dir)
+    # Load config from config.json
+    root_dir = join("models", args.root)
+    config = Config.load(root_dir)
 
-wandb.init(
-    project="RL_Project",
-    name=args.root,
-    config=asdict(config)
-)
+    wandb.init(
+        project="RL_Project",
+        name=args.root,
+        config=asdict(config)
+    )
 
-envs = gym.vector.make(config.env, config.num_envs, asynchronous=True)
+    envs = gym.vector.make(config.env, config.num_envs, asynchronous=True)
 
-state_shape = envs.single_observation_space.sample().shape
-action_shape = envs.single_action_space.sample().shape
-buffer = ExperienceBuffer(config.exp_buffer_len,
-                          keys=["state", "next_state", "action", "reward", "terminal"],
-                          key_shapes=[state_shape, state_shape, action_shape, tuple(), tuple()],
-                          key_dtypes=[np.float32, np.float32, np.int64, np.float32, np.bool_])
+    state_shape = envs.single_observation_space.sample().shape
+    action_shape = envs.single_action_space.sample().shape
+    buffer = ExperienceBuffer(config.exp_buffer_len,
+                              keys=["state", "next_state", "action", "reward", "terminal"],
+                              key_shapes=[state_shape, state_shape, action_shape, tuple(), tuple()],
+                              key_dtypes=[np.float32, np.float32, np.int64, np.float32, np.bool_])
 
-# Load model
-np.random.seed(config.seed)
-key = random.PRNGKey(config.seed)
-key, k1 = random.split(key)
-model = config.get_model(state_shape[0], envs.single_action_space.n, k1)
-print("Model:")
-print(model)
-print()
+    # Load model
+    np.random.seed(config.seed)
+    key = random.PRNGKey(config.seed)
+    key, k1 = random.split(key)
+    model = config.get_model(state_shape[0], envs.single_action_space.n, k1)
+    print("Model:")
+    print(model)
+    print()
 
-target_model = TargetNetwork(model, config.target_network_gamma)
+    target_model = TargetNetwork(model, config.target_network_gamma)
 
-# Load optimiser
-opt = adam(config.learning_rate)
-opt_state = opt.init(eqx.filter(model, eqx.is_array))
+    # Load optimiser
+    opt = adam(config.learning_rate)
+    opt_state = opt.init(eqx.filter(model, eqx.is_array))
 
-# Track training stats
-stats = {"avg_reward": {}, "std_reward": {}, "loss": {}}
+    # Track training stats
+    stats = {"avg_reward": {}, "std_reward": {}, "loss": {}}
 
-it = tqdm(range(config.num_epochs))
-for epoch in it:
-    q_policy = QPolicy(model)
-    q_policy.get_action = eqx.filter_jit(q_policy.get_action)
-
-    eps = config.get_eps(epoch)
-    eps_policy = EpsPolicy(envs.single_action_space, q_policy, eps)
-
-    # Collect some nice fresh data
-    key = collect_data(key, envs, eps_policy, buffer, config.simulation_steps_per_epoch)
-
-    dl = batched_dataloader(buffer, batch_size=config.batch_size, drop_last=True)
-
-    epoch_losses = []
-    for batch in dl:
-        s0 = jnp.asarray(batch["state"])
-        s1 = jnp.asarray(batch["next_state"])
-        a = jnp.asarray(batch["action"])
-        r = jnp.asarray(batch["reward"])
-        d = jnp.asarray(batch["terminal"]).astype(np.float32)
-
-        model, opt_state, loss_val = train_step(model, opt_state, target_model.network, s0, s1, a, r, d)
-        epoch_losses.append(loss_val.item())
-
-        target_model.update(model)
-
-    avg_loss = sum(epoch_losses) / len(epoch_losses)
-    it.set_description(f"Loss = {avg_loss:.2f}")
-
-    stats["loss"][epoch] = avg_loss
-    wandb.log({"loss": avg_loss, "epoch": epoch})
-
-    if epoch > 0 and epoch % config.save_every == 0:
-        util.save_model(root_dir, model)
-
-    if epoch > 0 and epoch % config.display_every == 0:
+    it = tqdm(range(config.num_epochs))
+    for epoch in it:
         q_policy = QPolicy(model)
         q_policy.get_action = eqx.filter_jit(q_policy.get_action)
 
-        env = gym.make(config.env, render_mode="human")
-        state, _ = env.reset(seed=epoch)
-        for _ in range(1000):
-            action = q_policy.get_action(state[None], key)[0]
-            action = np.array(action)
-            state, reward, terminated, truncated, _ = env.step(action)
-            if terminated or truncated:
-                state, _ = env.reset()
-        env.close()
+        eps = config.get_eps(epoch)
+        eps_policy = EpsPolicy(envs.single_action_space, q_policy, eps)
 
-    if epoch > 0 and epoch % config.eval_every == 0:
-        q_policy = QPolicy(model)
-        q_policy.get_action = eqx.filter_jit(q_policy.get_action)
+        # Collect some nice fresh data
+        key = collect_data(key, envs, eps_policy, buffer, config.simulation_steps_per_epoch)
 
-        avg_reward, std_reward = evaluate.evaluate(config, seed=epoch, policy=q_policy, repeats=config.eval_reps)
-        stats["avg_reward"][epoch] = avg_reward
-        stats["std_reward"][epoch] = std_reward
+        dl = batched_dataloader(buffer, batch_size=config.batch_size, drop_last=True)
 
-        wandb.log({"reward": avg_reward, "epoch": epoch})
+        epoch_losses = []
+        for batch in dl:
+            s0 = jnp.asarray(batch["state"])
+            s1 = jnp.asarray(batch["next_state"])
+            a = jnp.asarray(batch["action"])
+            r = jnp.asarray(batch["reward"])
+            d = jnp.asarray(batch["terminal"]).astype(np.float32)
 
-# Save final model
-util.save_model(root_dir, model)
+            model, opt_state, loss_val = train_step(model, opt_state, target_model.network, s0, s1, a, r, d)
+            epoch_losses.append(loss_val.item())
 
-envs.close()
+            target_model.update(model)
 
-# Save stats
-pickle.dump(stats, open(join(root_dir, "stats.pickle"), "wb"))
+        avg_loss = sum(epoch_losses) / len(epoch_losses)
+        it.set_description(f"Loss = {avg_loss:.2f}")
 
-util.plot_reward(stats)
-util.plot_loss(stats)
+        stats["loss"][epoch] = avg_loss
+        wandb.log({"loss": avg_loss, "epoch": epoch})
 
-wandb.finish()
+        if epoch > 0 and epoch % config.save_every == 0:
+            util.save_model(root_dir, model)
+
+        if epoch > 0 and epoch % config.display_every == 0:
+            q_policy = QPolicy(model)
+            q_policy.get_action = eqx.filter_jit(q_policy.get_action)
+
+            env = gym.make(config.env, render_mode="human")
+            state, _ = env.reset(seed=epoch)
+            for _ in range(1000):
+                action = q_policy.get_action(state[None], key)[0]
+                action = np.array(action)
+                state, reward, terminated, truncated, _ = env.step(action)
+                if terminated or truncated:
+                    state, _ = env.reset()
+            env.close()
+
+        if epoch > 0 and epoch % config.eval_every == 0:
+            q_policy = QPolicy(model)
+            q_policy.get_action = eqx.filter_jit(q_policy.get_action)
+
+            avg_reward, std_reward = evaluate.evaluate(config, seed=epoch, policy=q_policy, repeats=config.eval_reps)
+            stats["avg_reward"][epoch] = avg_reward
+            stats["std_reward"][epoch] = std_reward
+
+            wandb.log({"reward": avg_reward, "epoch": epoch})
+
+    # Save final model
+    util.save_model(root_dir, model)
+
+    envs.close()
+
+    # Save stats
+    pickle.dump(stats, open(join(root_dir, "stats.pickle"), "wb"))
+
+    util.plot_reward(stats)
+    util.plot_loss(stats)
+
+    wandb.finish()
