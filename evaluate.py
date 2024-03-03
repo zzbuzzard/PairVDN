@@ -100,11 +100,9 @@ def evaluate_multi_agent(config: Config, seed: int, policy: Policy, repeats: int
         reward = sum(rewards.values()) / len(rewards)
         agg_reward += float(reward)
 
-        terminal = bool(env.agents)
-
-        if terminal:
+        if not env.agents:
             seed += 1
-            obs_dict, _ = env.reset(seed=seed)
+            obs_dict, _ = env.reset()
             obs_dict = util.value_map(obs_dict, obs_map)
 
             finished_rewards.append(agg_reward)
@@ -113,6 +111,52 @@ def evaluate_multi_agent(config: Config, seed: int, policy: Policy, repeats: int
     rewards = np.array(finished_rewards)
     rewards, std = rewards.mean().item(), rewards.std().item()
     return rewards, std
+
+
+def play_single_agent(config: Config, policy: Policy):
+    """Plays infinite human visible games."""
+    env = gym.make(config.env, render_mode="human")
+    state, _ = env.reset(seed=0)
+    agg_reward = 0
+    while True:
+        action = policy.get_action(state[None], key)[0]
+        action = np.array(action)
+        state, reward, terminated, truncated, _ = env.step(action)
+        agg_reward += reward
+        if terminated or truncated:
+            state, _ = env.reset()
+
+            print(f"Total reward: {agg_reward}")
+            agg_reward = 0
+
+
+def play_multi_agent(config: Config, policy: Policy, agent_names):
+    """Plays infinite human visible games."""
+    env, obs_map = util.make_marl_env(config.env, config.env_kwargs | {"render_mode": "human"})
+    obs_dict, _ = env.reset(seed=0)
+    obs_dict = util.value_map(obs_dict, obs_map)
+
+    agg_reward = 0
+
+    while True:
+        all_obs = np.concatenate([obs_dict[i][None] for i in agent_names])
+        all_actions = policy.get_action(all_obs, None)
+
+        action_dict = {name: a.item() for name, a in zip(agent_names, all_actions)}
+
+        obs_dict, rewards, terminated, truncated, _ = env.step(action_dict)
+        obs_dict = util.value_map(obs_dict, obs_map)
+
+        # Take the mean reward across agents
+        reward = sum(rewards.values()) / len(rewards)
+        agg_reward += float(reward)
+
+        if not env.agents:
+            obs_dict, _ = env.reset()
+            obs_dict = util.value_map(obs_dict, obs_map)
+
+            print(f"Total reward: {agg_reward}")
+            agg_reward = 0
 
 
 if __name__ == "__main__":
@@ -125,9 +169,23 @@ if __name__ == "__main__":
     root_dir = join("models", args.root)
     config = Config.load(root_dir)
 
-    env = gym.make(config.env)  # bit of a workaround; construct environment to get its obs/action space shape
-    key = jax.random.PRNGKey(0)
-    model = config.get_model(env.observation_space.shape[0], env.action_space.n, key)
+    is_marl = config.env in util.marl_envs
+
+    # bit of a workaround; construct environment to get its obs/action space shape
+    key = jax.random.PRNGKey(0)  # (just used for network init - ovewritten by load)
+    if is_marl:
+        env, obs_map = util.make_marl_env(config.env, config.env_kwargs)
+        agent_names = sorted(env.possible_agents)
+        num_agents = len(agent_names)
+
+        obs_shape = obs_map(env.observation_space(agent_names[0]).sample()).shape
+        num_actions = env.action_space(agent_names[0]).n
+
+        model = config.get_model(obs_shape[0], num_actions, key, num_agents=num_agents)
+    else:
+        env = gym.make(config.env)
+        model = config.get_model(env.observation_space.shape[0], env.action_space.n, key)
+
     env.close()
     model = util.load_model(root_dir, model)
 
@@ -139,22 +197,22 @@ if __name__ == "__main__":
     util.plot_loss(stats)
 
     # TODO: cmd line arg
-    reps = 20
+    reps = 50
     print("Repeats:", reps)
 
-    r, s = evaluate(config, 0, q_policy, reps)
-    print(f"(parallel) Score {r:.2f} +- {s:.1f}")
+    if is_marl:
+        r, s = evaluate_multi_agent(config, 0, q_policy, reps, agent_names)
+        print(f"Score {r:.4f} +- {s:.3f}")
+    else:
+        r, s = evaluate(config, 0, q_policy, reps)
+        print(f"(parallel) Score {r:.2f} +- {s:.1f}")
 
-    r, s = evaluate_sequential(config, 0, q_policy, reps)
-    print(f"(sequential) Score {r:.2f} +- {s:.1f}")
+        r, s = evaluate_sequential(config, 0, q_policy, reps)
+        print(f"(sequential) Score {r:.2f} +- {s:.1f}")
 
-    ## Then just runs an infinite sim
-    env = gym.make(config.env, render_mode="human")
-    state, _ = env.reset(seed=0)
-    while True:
-        action = q_policy.get_action(state[None], key)[0]
-        action = np.array(action)
-        state, reward, terminated, truncated, _ = env.step(action)
-        if terminated or truncated:
-            state, _ = env.reset()
-    env.close()
+    # Then run infinite games for fun
+    if is_marl:
+        play_multi_agent(config, q_policy, agent_names)
+    else:
+        play_single_agent(config, q_policy)
+

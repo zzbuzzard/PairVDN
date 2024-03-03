@@ -71,6 +71,9 @@ def value_map(x: Dict, f) -> Dict:
     return {u: f(v) for u, v in x.items()}
 
 
+marl_envs = ["cooperative_pong", "knights_archers_zombies", "pursuit"]
+
+
 def make_marl_env(name: str, env_kwargs: dict) -> Tuple[pettingzoo.ParallelEnv, Callable]:
     """
     PettingZoo doesn't have a pettingzoo.make() apparently, but also I have custom settings for many of these.

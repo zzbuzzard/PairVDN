@@ -193,9 +193,7 @@ if __name__ == "__main__":
                 obs_dict, rewards, terminated, truncated, _ = henv.step(action_dict)
                 obs_dict = util.value_map(obs_dict, obs_map)
 
-                terminal = bool(henv.agents)
-
-                if not terminal:
+                if not henv.agents:
                     obs_dict, _ = henv.reset(seed=config.seed + num_runs)
                     obs_dict = util.value_map(obs_dict, obs_map)
                     num_runs += 1
