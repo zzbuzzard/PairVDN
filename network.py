@@ -1,13 +1,10 @@
-"""Implements the DQN"""
+"""Implements DQN"""
 import jax
 import jax.numpy as jnp
 from jax import grad, jit, vmap
 from jax import random
 import equinox as eqx
 from equinox import nn
-from optax import adam
-import matplotlib.pyplot as plt
-from tqdm import tqdm
 from jaxtyping import Array, Float, PyTree
 from typing import List
 

@@ -1,9 +1,10 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from os import path
 import json
 from typing import List
 from abc import ABC
 from network import QMLP
+from multiagent_network import VDN
 
 
 @dataclass
@@ -13,6 +14,11 @@ class ModelConfig(ABC):
 
 @dataclass
 class QMLPConfig(ModelConfig):
+    hidden_layers: List[int]
+
+
+@dataclass
+class VDNConfig(ModelConfig):
     hidden_layers: List[int]
 
 
@@ -43,6 +49,9 @@ class Config:
     num_envs: int = 16
     final_layer_small_init: bool = False
 
+    # MARL stuff
+    env_kwargs: dict = field(default_factory=dict)
+
     @staticmethod
     def load(root_path: str):
         """
@@ -57,14 +66,18 @@ class Config:
 
         if data["model_type"] == "QMLP":
             data["model_config"] = QMLPConfig(**data["model_config"])
+        elif data["model_type"] == "VDN":
+            data["model_config"] = VDNConfig(**data["model_config"])
         else:
             raise NotImplementedError(f"Unknown model type '{data['model_type']}'")
 
         return Config(**data)
 
-    def get_model(self, input_dim, output_dim, key):
+    def get_model(self, input_dim, output_dim, key, num_agents=None):
         if self.model_type == "QMLP":
             return QMLP(input_dim, output_dim, self.model_config.hidden_layers, self.final_layer_small_init, key)
+        elif self.model_type == "VDN":
+            return VDN(num_agents, key, input_dim=input_dim, output_dim=output_dim, hidden_layers=self.model_config.hidden_layers, final_layer_small_init=self.final_layer_small_init)
         else:
             raise NotImplementedError(f"Unknown model '{self.model_type}'.")
 
