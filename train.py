@@ -18,6 +18,7 @@ from policy import Policy, QPolicy, EpsPolicy
 from config import Config
 import util
 import evaluate
+from network import QFunc
 from target_network import TargetNetwork
 
 
@@ -47,30 +48,39 @@ def collect_data(key, envs: gym.Env, policy: Policy, buffer: ExperienceBuffer, s
     return key
 
 
-def loss_single(model: eqx.Module, target_model: eqx.Module, s0, s1, a, r, d):
-    """Computes loss on *non-batched* data"""
-    a0_scores = model(s0)
-    q1 = a0_scores[a]
+# def loss_single(model: QFunc, target_model: QFunc, s0, s1, a, r, d):
+#     """Computes loss on *non-batched* data"""
+#     a0_scores = model(s0)
+#     q1 = a0_scores[a]
+#
+#     a1_scores = target_model(s1)
+#     q_max = jnp.max(a1_scores)
+#     q2 = r + (1 - d) * config.gamma * q_max  # 1 - d -> nullifies when d=1
+#
+#     return (q1 - q2) ** 2
 
-    a1_scores = target_model(s1)
-    q_max = jnp.max(a1_scores)
-    q2 = r + (1 - d) * config.gamma * q_max  # 1 - d -> nullifies when d=1
+# loss_batched = jax.vmap(loss_single, in_axes=(None, None, 0, 0, 0, 0, 0))
+
+
+def loss_batched(model: QFunc, target_model: QFunc, s0, s1, a, r, d):
+    """Computes loss on *batched* data"""
+    q1 = model.evaluate(s0, a)  # Q(s, a)
+
+    qmax = target_model.max(s1)  # max a'. Q(s', a')
+    q2 = r + (1 - d) * config.gamma * qmax  # 1 - d -> nullifies when d=1
 
     return (q1 - q2) ** 2
 
 
-loss_batched = jax.vmap(loss_single, in_axes=(None, None, 0, 0, 0, 0, 0))
-
-
 @eqx.filter_value_and_grad
-def loss_fn(model, target_model, s0, s1, a, r, d):
+def loss_fn(model: QFunc, target_model: QFunc, s0, s1, a, r, d):
     """Computes loss on batched data"""
     losses = loss_batched(model, target_model, s0, s1, a, r, d)
     return jnp.mean(losses)
 
 
 @eqx.filter_jit
-def train_step(model: eqx.Module, opt_state, target_model: eqx.Module, s0, s1, a, r, d):
+def train_step(model: QFunc, opt_state, target_model: QFunc, s0, s1, a, r, d):
     loss_val, grad = loss_fn(model, target_model, s0, s1, a, r, d)
     updates, opt_state = opt.update(grad, opt_state, model)
     model = eqx.apply_updates(model, updates)
