@@ -21,22 +21,26 @@ class ExperienceBuffer:
             return self.length
         return self.index
 
-    def add_experiences(self, **kwargs):
+    def add_experiences(self, single_mode=False, **kwargs):
         """Pass data in format {key1: batched data1, key2: batched data2, ...} with equal batch dim"""
         for key, buf in zip(self.keys, self.data):
             d = kwargs[key]
-            n = d.shape[0]
+            if single_mode:
+                batch_size = 1
+                d = d[None]
+            else:
+                batch_size = d.shape[0]
 
-            if self.index + n <= self.length:
-                buf[self.index: self.index + n] = d
+            if self.index + batch_size <= self.length:
+                buf[self.index: self.index + batch_size] = d
             else:
                 # handle wraparound
                 count1 = self.length - self.index
-                count2 = n - count1
+                count2 = batch_size - count1
                 buf[self.index:] = d[:count1]
                 buf[:count2] = d[count1:]
 
-        self.index += n
+        self.index += batch_size
         if self.index >= self.length:
             self.full = True
             self.index %= self.length
