@@ -212,6 +212,9 @@ if __name__ == "__main__":
 
             wandb.log({"reward": avg_reward, "epoch": epoch})
 
+            # Save stats
+            pickle.dump(stats, open(join(root_dir, "stats.pickle"), "wb"))
+
     # Save final model
     util.save_model(root_dir, model)
 
