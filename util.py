@@ -3,6 +3,8 @@ import equinox as eqx
 import matplotlib.pyplot as plt
 from os.path import join, isfile
 
+from network import QFunc
+
 
 def save_model(root_path: str, model: eqx.Module):
     path = join(root_path, "model.eqx")
@@ -10,7 +12,7 @@ def save_model(root_path: str, model: eqx.Module):
     eqx.tree_serialise_leaves(path, model)
 
 
-def load_model(root_path: str, model: eqx.Module) -> eqx.Module:
+def load_model(root_path: str, model: eqx.Module) -> QFunc:
     path = join(root_path, "model.eqx")
     if isfile(path):
         print("Deserialising from", path)

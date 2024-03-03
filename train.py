@@ -132,7 +132,6 @@ if __name__ == "__main__":
     it = tqdm(range(config.num_epochs))
     for epoch in it:
         q_policy = QPolicy(model)
-        q_policy.get_action = eqx.filter_jit(q_policy.get_action)
 
         eps = config.get_eps(epoch)
         eps_policy = EpsPolicy(envs.single_action_space, q_policy, eps)
@@ -166,7 +165,6 @@ if __name__ == "__main__":
 
         if epoch > 0 and epoch % config.display_every == 0:
             q_policy = QPolicy(model)
-            q_policy.get_action = eqx.filter_jit(q_policy.get_action)
 
             env = gym.make(config.env, render_mode="human")
             state, _ = env.reset(seed=epoch)
@@ -180,7 +178,6 @@ if __name__ == "__main__":
 
         if epoch > 0 and epoch % config.eval_every == 0:
             q_policy = QPolicy(model)
-            q_policy.get_action = eqx.filter_jit(q_policy.get_action)
 
             avg_reward, std_reward = evaluate.evaluate(config, seed=epoch, policy=q_policy, repeats=config.eval_reps)
             stats["avg_reward"][epoch] = avg_reward

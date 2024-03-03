@@ -1,6 +1,7 @@
 import gymnasium as gym
 import jax
 import jax.numpy as jnp
+import equinox as eqx
 import numpy as np
 from abc import ABC, abstractmethod
 from network import QFunc
@@ -22,6 +23,7 @@ class QPolicy(Policy):
     def __init__(self, network: QFunc):
         self.network = network
 
+    @eqx.filter_jit
     def get_action(self, states, key):
         return self.network.argmax(states)
 
@@ -33,6 +35,7 @@ class EpsPolicy(Policy):
         self.policy = policy
         self.eps = eps
 
+    @eqx.filter_jit
     def get_action(self, states, key):
         n = states.shape[0]
 

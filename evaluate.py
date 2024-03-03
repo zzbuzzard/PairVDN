@@ -93,7 +93,6 @@ if __name__ == "__main__":
     model = util.load_model(root_dir, model)
 
     q_policy = QPolicy(model)
-    q_policy.get_action = eqx.filter_jit(q_policy.get_action)
 
     # Load stats
     stats = pickle.load(open(join(root_dir, "stats.pickle"), "rb"))
