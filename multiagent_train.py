@@ -14,6 +14,7 @@ import pickle
 import wandb
 from dataclasses import asdict
 from whatis import whatis as wi
+import time
 
 from train import loss_batched
 from replay_buffer import ExperienceBuffer, batched_dataloader
@@ -201,6 +202,17 @@ if __name__ == "__main__":
 
             henv.close()
 
+        if epoch > 0 and epoch % config.eval_every == 0:
+            q_policy = QPolicy(model)
+
+            start = time.time()
+            avg_reward, std_reward = evaluate.evaluate_multi_agent(config, seed=epoch, policy=q_policy, repeats=config.eval_reps, agent_names=agent_names)
+            print(f"Evaluation completed. Took {time.time() - start:.3f}s")
+
+            stats["avg_reward"][epoch] = avg_reward
+            stats["std_reward"][epoch] = std_reward
+
+            wandb.log({"reward": avg_reward, "epoch": epoch})
 
     # Save final model
     util.save_model(root_dir, model)

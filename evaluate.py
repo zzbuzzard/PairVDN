@@ -76,6 +76,45 @@ def evaluate_sequential(config: Config, seed: int, policy: Policy, repeats: int)
     return rewards, std
 
 
+def evaluate_multi_agent(config: Config, seed: int, policy: Policy, repeats: int, agent_names):
+    """
+    Evaluate multi-agent setting. Note vector environments are not supported by PettingZoo so it is sequential.
+    """
+    env, obs_map = util.make_marl_env(config.env, config.env_kwargs)
+    obs_dict, _ = env.reset(seed=seed)
+    obs_dict = util.value_map(obs_dict, obs_map)
+
+    finished_rewards = []
+    agg_reward = 0
+
+    while len(finished_rewards) < repeats:
+        all_obs = np.concatenate([obs_dict[i][None] for i in agent_names])
+        all_actions = policy.get_action(all_obs, None)
+
+        action_dict = {name: a.item() for name, a in zip(agent_names, all_actions)}
+
+        obs_dict, rewards, terminated, truncated, _ = env.step(action_dict)
+        obs_dict = util.value_map(obs_dict, obs_map)
+
+        # Take the mean reward across agents
+        reward = sum(rewards.values()) / len(rewards)
+        agg_reward += float(reward)
+
+        terminal = bool(env.agents)
+
+        if terminal:
+            seed += 1
+            obs_dict, _ = env.reset(seed=seed)
+            obs_dict = util.value_map(obs_dict, obs_map)
+
+            finished_rewards.append(agg_reward)
+            agg_reward = 0
+
+    rewards = np.array(finished_rewards)
+    rewards, std = rewards.mean().item(), rewards.std().item()
+    return rewards, std
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--root", type=str, required=True, help="Path to root directory containing config.json")
