@@ -6,30 +6,11 @@ import equinox as eqx
 from equinox import nn
 from jaxtyping import Array, Float, PyTree
 from typing import List
-from abc import ABC, abstractmethod
 
-from network import QMLP
-
-
-class MultiQ(eqx.Module, ABC):
-    @abstractmethod
-    def argmax(self, obs):
-        """Return argmax actions given this observation. Formally, argmax_a Q(obs, a)"""
-        raise NotImplementedError
-
-    @abstractmethod
-    def evaluate(self, obs, actions):
-        """Return Q(obs, actions)"""
-        raise NotImplementedError
-
-    def max(self, obs):
-        """Return max_a Q(obs, a). Defaults to evaluate(argmax())"""
-        actions = self.argmax(obs)
-        return self.evaluate(obs, actions)
+from network import QMLP, QFunc
 
 
-# Just an MLP with ReLU activation; simple DQN implementation.
-class VDN(MultiQ):
+class VDN(QFunc):
     qs: List
     num_agents: int
 
@@ -37,11 +18,6 @@ class VDN(MultiQ):
         self.num_agents = num_agents
         keys = jax.random.split(key, num_agents)
         self.qs = [QMLP(**kwargs, key=k) for k in keys]
-
-    # TODO: Idk why i can't call this
-    def compile(self):
-        for q in self.qs:
-            q.__call__ = eqx.filter_jit(q.__call__)
 
     def argmax(self, obs):
         actions = []

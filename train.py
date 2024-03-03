@@ -62,26 +62,26 @@ def collect_data(key, envs: gym.Env, policy: Policy, buffer: ExperienceBuffer, s
 # loss_batched = jax.vmap(loss_single, in_axes=(None, None, 0, 0, 0, 0, 0))
 
 
-def loss_batched(model: QFunc, target_model: QFunc, s0, s1, a, r, d):
+def loss_batched(model: QFunc, target_model: QFunc, s0, s1, a, r, d, gamma):
     """Computes loss on *batched* data"""
     q1 = model.evaluate(s0, a)  # Q(s, a)
 
     qmax = target_model.max(s1)  # max a'. Q(s', a')
-    q2 = r + (1 - d) * config.gamma * qmax  # 1 - d -> nullifies when d=1
+    q2 = r + (1 - d) * gamma * qmax  # 1 - d -> nullifies when d=1
 
     return (q1 - q2) ** 2
 
 
 @eqx.filter_value_and_grad
-def loss_fn(model: QFunc, target_model: QFunc, s0, s1, a, r, d):
+def loss_fn(model: QFunc, target_model: QFunc, s0, s1, a, r, d, gamma):
     """Computes loss on batched data"""
-    losses = loss_batched(model, target_model, s0, s1, a, r, d)
+    losses = loss_batched(model, target_model, s0, s1, a, r, d, gamma)
     return jnp.mean(losses)
 
 
 @eqx.filter_jit
-def train_step(model: QFunc, opt_state, target_model: QFunc, s0, s1, a, r, d):
-    loss_val, grad = loss_fn(model, target_model, s0, s1, a, r, d)
+def train_step(model: QFunc, opt_state, target_model: QFunc, s0, s1, a, r, d, gamma):
+    loss_val, grad = loss_fn(model, target_model, s0, s1, a, r, d, gamma)
     updates, opt_state = opt.update(grad, opt_state, model)
     model = eqx.apply_updates(model, updates)
     return model, opt_state, loss_val
@@ -149,7 +149,7 @@ if __name__ == "__main__":
             r = jnp.asarray(batch["reward"])
             d = jnp.asarray(batch["terminal"]).astype(np.float32)
 
-            model, opt_state, loss_val = train_step(model, opt_state, target_model.network, s0, s1, a, r, d)
+            model, opt_state, loss_val = train_step(model, opt_state, target_model.network, s0, s1, a, r, d, config.gamma)
             epoch_losses.append(loss_val.item())
 
             target_model.update(model)
