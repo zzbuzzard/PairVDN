@@ -18,7 +18,7 @@ import time
 
 from train import loss_batched
 from replay_buffer import ExperienceBuffer, batched_dataloader
-from policy import Policy, QPolicy, EpsPolicy
+from policy import Policy, QPolicy, EpsPolicy, RandomPolicy
 from config import Config
 import util
 import evaluate
@@ -139,6 +139,12 @@ if __name__ == "__main__":
 
     # Track training stats
     stats = {"avg_reward": {}, "std_reward": {}, "loss": {}}
+
+    # Populate buffer with random data
+    print("Populating buffer...")
+    random_policy = RandomPolicy(env.action_space(agent_names[0]))
+    key = collect_data(key, env, random_policy, buffer, config.simulation_steps_initial)
+    print("Done!")
 
     it = tqdm(range(1, config.num_epochs + 1))
     for epoch in it:

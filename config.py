@@ -52,6 +52,7 @@ class Config:
     target_network_gamma: float = 0.99
     exploration_eps_start: float = 1.0
     exploration_eps_end: float = 0.05
+    simulation_steps_initial: int = 0  # number of random experiences to add at the start
     simulation_steps_per_epoch: int = 1000  # creates simulation_steps_per_epoch * num_envs datapoints
     num_envs: int = 16
     final_layer_small_init: bool = False

@@ -50,3 +50,14 @@ class EpsPolicy(Policy):
         out = jnp.where(use_random, random_action, q_action)
 
         return out
+
+
+class RandomPolicy(Policy):
+    def __init__(self, action_space):
+        self.action_space = action_space
+
+    @eqx.filter_jit
+    def get_action(self, states, key):
+        n = states.shape[0]
+        random_action = jax.random.randint(key, (n,), 0, self.action_space.n, dtype=self.action_space.dtype)
+        return random_action
