@@ -20,55 +20,79 @@ class IndividualQ(QFunc):
     """
     qs: List
     num_agents: int
+    share_params: bool
 
-    def __init__(self, num_agents: int, key, **kwargs):
+    def __init__(self, num_agents: int, share_params: bool, key, **kwargs):
         self.num_agents = num_agents
-        keys = jax.random.split(key, num_agents)
-        self.qs = [QMLP(**kwargs, key=k) for k in keys]
+        self.share_params = share_params
+
+        if share_params:
+            self.qs = [QMLP(**kwargs, key=key)]
+        else:
+            keys = jax.random.split(key, num_agents)
+            self.qs = [QMLP(**kwargs, key=k) for k in keys]
+
+    # get ith implicit Q-network
+    def gq(self, idx):
+        if self.share_params:
+            return self.qs[0]
+        return self.qs[idx]
 
     def argmax(self, obs):
         actions = []
         for i in range(self.num_agents):
-            actions.append(jnp.argmax(self.qs[i](obs[i])))
+            actions.append(jnp.argmax(self.gq(i)(obs[i])))
         return jnp.array(actions)
 
     def max(self, obs):
         qs = []
         for i in range(self.num_agents):
-            qs.append(jnp.max(self.qs[i](obs[i])))
+            qs.append(jnp.max(self.gq(i)(obs[i])))
         return jnp.array(qs)
 
     def evaluate(self, obs, actions):
         qs = []
         for i in range(self.num_agents):
-            qs.append(self.qs[i](obs[i])[actions[i]])
+            qs.append(self.gq(i)(obs[i])[actions[i]])
         return jnp.array(qs)
 
 
 class VDN(QFunc):
     qs: List
     num_agents: int
+    share_params: bool
 
-    def __init__(self, num_agents: int, key, **kwargs):
+    def __init__(self, num_agents: int, share_params: bool, key, **kwargs):
         self.num_agents = num_agents
-        keys = jax.random.split(key, num_agents)
-        self.qs = [QMLP(**kwargs, key=k) for k in keys]
+        self.share_params = share_params
+
+        if share_params:
+            self.qs = [QMLP(**kwargs, key=key)]
+        else:
+            keys = jax.random.split(key, num_agents)
+            self.qs = [QMLP(**kwargs, key=k) for k in keys]
+
+    # get ith implicit Q-network
+    def gq(self, idx):
+        if self.share_params:
+            return self.qs[0]
+        return self.qs[idx]
 
     def argmax(self, obs):
         actions = []
         for i in range(self.num_agents):
-            actions.append(jnp.argmax(self.qs[i](obs[i])))
+            actions.append(jnp.argmax(self.gq(i)(obs[i])))
         return jnp.array(actions)
 
     def max(self, obs):
         t = 0
         for i in range(self.num_agents):
-            t += jnp.max(self.qs[i](obs[i]))
+            t += jnp.max(self.gq(i)(obs[i]))
         return t
 
     def evaluate(self, obs, actions):
         t = 0
         for i in range(self.num_agents):
-            t += self.qs[i](obs[i])[actions[i]]
+            t += self.gq(i)(obs[i])[actions[i]]
         return t
 

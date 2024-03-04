@@ -20,11 +20,13 @@ class QMLPConfig(ModelConfig):
 @dataclass
 class VDNConfig(ModelConfig):
     hidden_layers: List[int]
+    share_params: bool = False
 
 
 @dataclass
 class IQLConfig(ModelConfig):
     hidden_layers: List[int]
+    share_params: bool = False
 
 
 @dataclass
@@ -84,11 +86,11 @@ class Config:
         if self.model_type == "QMLP":
             return QMLP(input_dim, output_dim, self.model_config.hidden_layers, self.final_layer_small_init, key)
         elif self.model_type == "VDN":
-            return VDN(num_agents, key, input_dim=input_dim, output_dim=output_dim,
-                       hidden_layers=self.model_config.hidden_layers,
+            return VDN(num_agents, self.model_config.share_params, key, input_dim=input_dim,
+                       output_dim=output_dim, hidden_layers=self.model_config.hidden_layers,
                        final_layer_small_init=self.final_layer_small_init)
         elif self.model_type == "IQL":
-            return IndividualQ(num_agents, key, input_dim=input_dim, output_dim=output_dim,
+            return IndividualQ(num_agents, self.model_config.share_params, key, input_dim=input_dim, output_dim=output_dim,
                                hidden_layers=self.model_config.hidden_layers,
                                final_layer_small_init=self.final_layer_small_init)
         else:
