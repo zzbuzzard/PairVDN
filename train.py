@@ -129,7 +129,7 @@ if __name__ == "__main__":
     # Track training stats
     stats = {"avg_reward": {}, "std_reward": {}, "loss": {}}
 
-    it = tqdm(range(config.num_epochs))
+    it = tqdm(range(1, config.num_epochs + 1))
     for epoch in it:
         q_policy = QPolicy(model)
 
@@ -160,10 +160,10 @@ if __name__ == "__main__":
         stats["loss"][epoch] = avg_loss
         wandb.log({"loss": avg_loss, "epoch": epoch})
 
-        if epoch > 0 and epoch % config.save_every == 0:
+        if epoch % config.save_every == 0:
             util.save_model(root_dir, model)
 
-        if epoch > 0 and epoch % config.display_every == 0:
+        if epoch % config.display_every == 0:
             q_policy = QPolicy(model)
 
             env = gym.make(config.env, render_mode="human")
@@ -176,7 +176,7 @@ if __name__ == "__main__":
                     state, _ = env.reset()
             env.close()
 
-        if epoch > 0 and epoch % config.eval_every == 0:
+        if epoch % config.eval_every == 0:
             q_policy = QPolicy(model)
 
             avg_reward, std_reward = evaluate.evaluate(config, seed=epoch, policy=q_policy, repeats=config.eval_reps)

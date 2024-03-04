@@ -50,7 +50,6 @@ def collect_data(key, env: pettingzoo.ParallelEnv, policy: Policy, buffer: Exper
 
         terminal = not bool(env.agents)
 
-        all_obs = np.concatenate([obs_dict[i][None] for i in agent_names])
         all_next_obs = np.concatenate([next_obs_dict[i][None] for i in agent_names])
         reward = np.array([reward])[0]
         terminal = np.array([terminal], dtype=np.bool_)[0]
@@ -141,7 +140,7 @@ if __name__ == "__main__":
     # Track training stats
     stats = {"avg_reward": {}, "std_reward": {}, "loss": {}}
 
-    it = tqdm(range(config.num_epochs))
+    it = tqdm(range(1, config.num_epochs + 1))
     for epoch in it:
         q_policy = QPolicy(model)
 
@@ -149,10 +148,12 @@ if __name__ == "__main__":
         eps_policy = EpsPolicy(env.action_space(agent_names[0]), q_policy, eps)
 
         # Collect some nice fresh data
+        it.set_description("Collecting data")
         key = collect_data(key, env, eps_policy, buffer, config.simulation_steps_per_epoch)
 
         dl = batched_dataloader(buffer, batch_size=config.batch_size, drop_last=True)
 
+        it.set_description("Training")
         epoch_losses = []
         for batch in dl:
             s0 = jnp.asarray(batch["all_obs"])
@@ -172,10 +173,10 @@ if __name__ == "__main__":
         stats["loss"][epoch] = avg_loss
         wandb.log({"loss": avg_loss, "epoch": epoch})
 
-        if epoch > 0 and epoch % config.save_every == 0:
+        if epoch % config.save_every == 0:
             util.save_model(root_dir, model)
 
-        if epoch > 0 and epoch % config.display_every == 0:
+        if epoch % config.display_every == 0:
             q_policy = QPolicy(model)
 
             henv, _ = util.make_marl_env(config.env, config.env_kwargs | {"render_mode": "human"})
@@ -183,7 +184,7 @@ if __name__ == "__main__":
             obs_dict, _ = henv.reset(seed=config.seed + num_runs)
             obs_dict = util.value_map(obs_dict, obs_map)
 
-            for _ in range(100):
+            for _ in range(50):
                 key, k1 = random.split(key)
                 all_obs = jnp.concatenate([obs_dict[i][None] for i in agent_names])
                 all_actions = q_policy.get_action(all_obs, k1)
@@ -194,13 +195,13 @@ if __name__ == "__main__":
                 obs_dict = util.value_map(obs_dict, obs_map)
 
                 if not henv.agents:
-                    obs_dict, _ = henv.reset(seed=config.seed + num_runs)
+                    obs_dict, _ = henv.reset()
                     obs_dict = util.value_map(obs_dict, obs_map)
                     num_runs += 1
 
             henv.close()
 
-        if epoch > 0 and epoch % config.eval_every == 0:
+        if epoch % config.eval_every == 0:
             q_policy = QPolicy(model)
 
             start = time.time()
