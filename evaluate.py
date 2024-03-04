@@ -162,6 +162,7 @@ def play_multi_agent(config: Config, policy: Policy, agent_names):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--root", type=str, required=True, help="Path to root directory containing config.json")
+    parser.add_argument("-n", "--num_repeats", type=int, default=20)
 
     args = parser.parse_args()
 
@@ -196,18 +197,16 @@ if __name__ == "__main__":
     util.plot_reward(stats)
     util.plot_loss(stats)
 
-    # TODO: cmd line arg
-    reps = 50
-    print("Repeats:", reps)
+    print("Repeats:", args.n)
 
     if is_marl:
-        r, s = evaluate_multi_agent(config, 0, q_policy, reps, agent_names)
+        r, s = evaluate_multi_agent(config, 0, q_policy, args.n, agent_names)
         print(f"Score {r:.4f} +- {s:.3f}")
     else:
-        r, s = evaluate(config, 0, q_policy, reps)
+        r, s = evaluate(config, 0, q_policy, args.n)
         print(f"(parallel) Score {r:.2f} +- {s:.1f}")
 
-        r, s = evaluate_sequential(config, 0, q_policy, reps)
+        r, s = evaluate_sequential(config, 0, q_policy, args.n)
         print(f"(sequential) Score {r:.2f} +- {s:.1f}")
 
     # Then run infinite games for fun
