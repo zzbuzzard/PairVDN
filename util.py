@@ -5,6 +5,8 @@ from os.path import join, isfile
 from typing import Tuple, Dict, Callable
 import pettingzoo
 from pettingzoo.butterfly import cooperative_pong_v5, knights_archers_zombies_v10 # , pistonball_v6 # TODO
+from pettingzoo.sisl import pursuit_v4
+from pettingzoo.mpe import simple_spread_v3
 import numpy as np
 
 from network import QFunc
@@ -71,7 +73,7 @@ def value_map(x: Dict, f) -> Dict:
     return {u: f(v) for u, v in x.items()}
 
 
-marl_envs = ["cooperative_pong", "knights_archers_zombies", "pursuit"]
+marl_envs = ["cooperative_pong", "knights_archers_zombies", "pursuit", "simple_spread"]
 
 
 def make_marl_env(name: str, env_kwargs: dict) -> Tuple[pettingzoo.ParallelEnv, Callable]:
@@ -83,8 +85,13 @@ def make_marl_env(name: str, env_kwargs: dict) -> Tuple[pettingzoo.ParallelEnv, 
         remove_channel = lambda obs: np.mean(obs, axis=2)
         return cooperative_pong_v5.parallel_env(cake_paddle=False, **env_kwargs), remove_channel
     elif name == "knights_archers_zombies":
-        flatten = np.ndarray.flatten
         return (knights_archers_zombies_v10.parallel_env(killable_knights=False, killable_archers=False, **env_kwargs),
-                flatten)
+                np.ndarray.flatten)
+    elif name == "pursuit":
+        # Note: surround=False is a much easier version of this game
+        # Note: (7 x 7 x 3) spatial input, CNN arch would be better than flattening
+        return pursuit_v4.parallel_env(**env_kwargs), np.ndarray.flatten
+    elif name == "simple_spread":
+        return simple_spread_v3.parallel_env(**env_kwargs), lambda x: x
     else:
         raise NotImplementedError(f"Unknown MARL environment '{name}'.")
