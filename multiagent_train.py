@@ -45,8 +45,8 @@ def collect_data(key, env: pettingzoo.ParallelEnv, policy: Policy, buffer: Exper
         next_obs_dict, rewards, terminated, truncated, _ = env.step(action_dict)
         next_obs_dict = util.value_map(next_obs_dict, obs_map)
 
-        # Take the mean reward across agents!
-        reward = sum(rewards.values()) / len(rewards)
+        # Take the total reward across agents as the overall reward
+        reward = float(sum(rewards.values()))
 
         terminal = not bool(env.agents)
 

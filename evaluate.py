@@ -96,9 +96,9 @@ def evaluate_multi_agent(config: Config, seed: int, policy: Policy, repeats: int
         obs_dict, rewards, terminated, truncated, _ = env.step(action_dict)
         obs_dict = util.value_map(obs_dict, obs_map)
 
-        # Take the mean reward across agents
-        reward = sum(rewards.values()) / len(rewards)
-        agg_reward += float(reward)
+        # Take the total reward across agents as the overall reward
+        reward = float(sum(rewards.values()))
+        agg_reward += reward
 
         if not env.agents:
             seed += 1
@@ -147,9 +147,9 @@ def play_multi_agent(config: Config, policy: Policy, agent_names):
         obs_dict, rewards, terminated, truncated, _ = env.step(action_dict)
         obs_dict = util.value_map(obs_dict, obs_map)
 
-        # Take the mean reward across agents
-        reward = sum(rewards.values()) / len(rewards)
-        agg_reward += float(reward)
+        # Take the total reward across agents as the overall reward
+        reward = float(sum(rewards.values()))
+        agg_reward += reward
 
         if not env.agents:
             obs_dict, _ = env.reset()
