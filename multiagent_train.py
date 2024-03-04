@@ -151,11 +151,10 @@ if __name__ == "__main__":
         q_policy = QPolicy(model)
 
         eps = config.get_eps(epoch)
-        print(f"Epoch {epoch}, ε={eps:.3f}")
         eps_policy = EpsPolicy(env.action_space(agent_names[0]), q_policy, eps)
 
         # Collect some nice fresh data
-        it.set_description("Collecting data")
+        it.set_description(f"Collecting data (ε={eps:.3f})")
         key = collect_data(key, env, eps_policy, buffer, config.simulation_steps_per_epoch)
 
         dl = batched_dataloader(buffer, batch_size=config.batch_size, drop_last=True)
