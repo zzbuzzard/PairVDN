@@ -7,6 +7,7 @@ from equinox import nn
 from jaxtyping import Array, Float, PyTree
 from typing import List
 
+import util
 from network import QMLP, QFunc
 
 
@@ -38,19 +39,19 @@ class IndividualQ(QFunc):
             return self.qs[0]
         return self.qs[idx]
 
-    def argmax(self, obs):
+    def argmax(self, obs, gstate=None):
         actions = []
         for i in range(self.num_agents):
             actions.append(jnp.argmax(self.gq(i)(obs[i])))
         return jnp.array(actions)
 
-    def max(self, obs):
+    def max(self, obs, gstate=None):
         qs = []
         for i in range(self.num_agents):
             qs.append(jnp.max(self.gq(i)(obs[i])))
         return jnp.array(qs)
 
-    def evaluate(self, obs, actions):
+    def evaluate(self, obs, actions, gstate=None):
         qs = []
         for i in range(self.num_agents):
             qs.append(self.gq(i)(obs[i])[actions[i]])
@@ -78,19 +79,19 @@ class VDN(QFunc):
             return self.qs[0]
         return self.qs[idx]
 
-    def argmax(self, obs):
+    def argmax(self, obs, gstate=None):
         actions = []
         for i in range(self.num_agents):
             actions.append(jnp.argmax(self.gq(i)(obs[i])))
         return jnp.array(actions)
 
-    def max(self, obs):
+    def max(self, obs, gstate=None):
         t = 0
         for i in range(self.num_agents):
             t += jnp.max(self.gq(i)(obs[i]))
         return t
 
-    def evaluate(self, obs, actions):
+    def evaluate(self, obs, actions, gstate=None):
         t = 0
         for i in range(self.num_agents):
             t += self.gq(i)(obs[i])[actions[i]]

@@ -3,8 +3,9 @@ from os import path
 import json
 from typing import List
 from abc import ABC
-from network import QMLP
-from multiagent_network import VDN, IndividualQ
+
+import network
+import multiagent_network
 
 
 @dataclass
@@ -20,6 +21,13 @@ class QMLPConfig(ModelConfig):
 @dataclass
 class VDNConfig(ModelConfig):
     hidden_layers: List[int]
+    share_params: bool = False
+
+
+@dataclass
+class QMIXConfig(ModelConfig):
+    hidden_layers: List[int]
+    hidden_dim: int
     share_params: bool = False
 
 
@@ -77,6 +85,8 @@ class Config:
             data["model_config"] = QMLPConfig(**data["model_config"])
         elif data["model_type"] == "VDN":
             data["model_config"] = VDNConfig(**data["model_config"])
+        elif data["model_type"] == "QMIX":
+            data["model_config"] = QMIXConfig(**data["model_config"])
         elif data["model_type"] == "IQL":
             data["model_config"] = IQLConfig(**data["model_config"])
         else:
@@ -84,15 +94,20 @@ class Config:
 
         return Config(**data)
 
-    def get_model(self, input_dim, output_dim, key, num_agents=None):
+    def get_model(self, input_dim, output_dim, key, global_state_dim=None, num_agents=None):
         if self.model_type == "QMLP":
-            return QMLP(input_dim, output_dim, self.model_config.hidden_layers, self.final_layer_small_init, key)
+            return network.QMLP(input_dim, output_dim, self.model_config.hidden_layers, self.final_layer_small_init, key)
         elif self.model_type == "VDN":
-            return VDN(num_agents, self.model_config.share_params, key, input_dim=input_dim,
+            return multiagent_network.VDN(num_agents, self.model_config.share_params, key, input_dim=input_dim,
                        output_dim=output_dim, hidden_layers=self.model_config.hidden_layers,
                        final_layer_small_init=self.final_layer_small_init)
+        elif self.model_type == "QMIX":
+            assert global_state_dim is not None
+            return multiagent_network.QMIX(num_agents, self.model_config.share_params, global_state_dim, self.model_config.hidden_dim,
+                        key, input_dim=input_dim, output_dim=output_dim, hidden_layers=self.model_config.hidden_layers,
+                        final_layer_small_init=self.final_layer_small_init)
         elif self.model_type == "IQL":
-            return IndividualQ(num_agents, self.model_config.share_params, key, input_dim=input_dim, output_dim=output_dim,
+            return multiagent_network.IndividualQ(num_agents, self.model_config.share_params, key, input_dim=input_dim, output_dim=output_dim,
                                hidden_layers=self.model_config.hidden_layers,
                                final_layer_small_init=self.final_layer_small_init)
         else:

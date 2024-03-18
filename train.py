@@ -62,11 +62,11 @@ def collect_data(key, envs: gym.Env, policy: Policy, buffer: ExperienceBuffer, s
 # loss_batched = jax.vmap(loss_single, in_axes=(None, None, 0, 0, 0, 0, 0))
 
 
-def loss_batched(model: QFunc, target_model: QFunc, s0, s1, a, r, d, gamma):
+def loss_batched(model: QFunc, target_model: QFunc, s0, s1, a, r, d, gamma, global_state0=None, global_state1=None):
     """Computes loss on *batched* data"""
-    q1 = model.evaluate(s0, a)  # Q(s, a)
+    q1 = model.evaluate(s0, a, gstate=global_state0)  # Q(s, a)
 
-    qmax = target_model.max(s1)  # max a'. Q(s', a')
+    qmax = target_model.max(s1, gstate=global_state1)  # max a'. Q(s', a')
     q2 = r + (1 - d) * gamma * qmax  # 1 - d -> nullifies when d=1
 
     return (q1 - q2) ** 2

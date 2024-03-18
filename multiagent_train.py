@@ -16,14 +16,14 @@ from dataclasses import asdict
 from whatis import whatis as wi
 import time
 
-from train import loss_batched
 from replay_buffer import ExperienceBuffer, batched_dataloader
-from policy import Policy, QPolicy, EpsPolicy, RandomPolicy
-from config import Config
+import config
 import util
 import evaluate
 from target_network import TargetNetwork
 from network import QFunc
+from policy import Policy, QPolicy, EpsPolicy, RandomPolicy
+import train
 
 
 num_runs = 0
@@ -33,17 +33,20 @@ def collect_data(key, env: pettingzoo.ParallelEnv, policy: Policy, buffer: Exper
     global num_runs
     obs_dict, _ = env.reset(seed=config.seed + num_runs)
     obs_dict = util.value_map(obs_dict, obs_map)
+    gs0 = env.state()
     num_runs += 1
 
     for _ in range(steps):
         key, k1 = random.split(key)
         all_obs = jnp.concatenate([obs_dict[i][None] for i in agent_names])
-        all_actions = policy.get_action(all_obs, k1)
+        all_actions = policy.get_action(all_obs, k1, gstate=gs0)
 
         action_dict = {name: a.item() for name, a in zip(agent_names, all_actions)}
 
         next_obs_dict, rewards, terminated, truncated, _ = env.step(action_dict)
         next_obs_dict = util.value_map(next_obs_dict, obs_map)
+
+        gs1 = env.state()
 
         # Take the total reward across agents as the overall reward
         reward = float(sum(rewards.values()))
@@ -55,13 +58,15 @@ def collect_data(key, env: pettingzoo.ParallelEnv, policy: Policy, buffer: Exper
         terminal = np.array([terminal], dtype=np.bool_)[0]
 
         buffer.add_experiences(all_obs=all_obs, all_next_obs=all_next_obs, all_actions=all_actions, reward=reward,
-                               terminal=terminal, single_mode=True)
+                               terminal=terminal, gs0=gs0, gs1=gs1, single_mode=True)
 
         obs_dict = next_obs_dict
+        gs0 = gs1
 
         if terminal:
             obs_dict, _ = env.reset(seed=config.seed + num_runs)
             obs_dict = util.value_map(obs_dict, obs_map)
+            gs0 = env.state()
             num_runs += 1
 
     return key
@@ -70,19 +75,19 @@ def collect_data(key, env: pettingzoo.ParallelEnv, policy: Policy, buffer: Exper
 # The version in train() operates on batches of single-agent environments, i.e. shape (B x ObsShape)
 # Here during training we operate on batches of multi-agent environments, i.e. shape (B x N x ObsShape)
 #  so we require another vmap
-loss_batched_batched = jax.vmap(loss_batched, in_axes=(None, None, 0, 0, 0, 0, 0, None))
+loss_batched_batched = jax.vmap(train.loss_batched, in_axes=(None, None, 0, 0, 0, 0, 0, None, 0, 0))
 
 
 @eqx.filter_value_and_grad
-def loss_fn(model: QFunc, target_model: QFunc, s0, s1, a, r, d, gamma):
+def loss_fn(model: QFunc, target_model: QFunc, s0, s1, a, r, d, global_state0, global_state1, gamma):
     """Computes loss on batched data"""
-    losses = loss_batched_batched(model, target_model, s0, s1, a, r, d, gamma)
+    losses = loss_batched_batched(model, target_model, s0, s1, a, r, d, gamma, global_state0, global_state1)
     return jnp.mean(losses)
 
 
 @eqx.filter_jit
-def train_step(model: QFunc, opt_state, target_model: QFunc, s0, s1, a, r, d, gamma):
-    loss_val, grad = loss_fn(model, target_model, s0, s1, a, r, d, gamma)
+def train_step(model: QFunc, opt_state, target_model: QFunc, s0, s1, a, r, d, global_state0, global_state1, gamma):
+    loss_val, grad = loss_fn(model, target_model, s0, s1, a, r, d, global_state0, global_state1, gamma)
     updates, opt_state = opt.update(grad, opt_state, model)
     model = eqx.apply_updates(model, updates)
     return model, opt_state, loss_val
@@ -95,7 +100,7 @@ if __name__ == "__main__":
 
     # Load config from config.json
     root_dir = join("models", args.root)
-    config = Config.load(root_dir)
+    config = config.Config.load(root_dir)
 
     wandb.init(
         project="RL_Project",
@@ -117,16 +122,19 @@ if __name__ == "__main__":
     all_obs_shape = (n,) + obs_shape
     all_actions_shape = (n,) + action_shape
 
+    global_state_shape = env.state_space.sample().shape
+    global_state_dim = global_state_shape[0]
+
     buffer = ExperienceBuffer(config.exp_buffer_len,
-                              keys=["all_obs", "all_next_obs", "all_actions", "reward", "terminal"],
-                              key_shapes=[all_obs_shape, all_obs_shape, all_actions_shape, tuple(), tuple()],
-                              key_dtypes=[np.float32, np.float32, np.int64, np.float32, np.bool_])
+                              keys=["all_obs", "all_next_obs", "all_actions", "reward", "terminal", "gs0", "gs1"],
+                              key_shapes=[all_obs_shape, all_obs_shape, all_actions_shape, tuple(), tuple(), global_state_shape, global_state_shape],
+                              key_dtypes=[np.float32, np.float32, np.int64, np.float32, np.bool_, np.float32, np.float32])
 
     # Load model
     np.random.seed(config.seed)
     key = random.PRNGKey(config.seed)
     key, k1 = random.split(key)
-    model = config.get_model(obs_shape[0], num_actions, k1, num_agents=n)
+    model = config.get_model(obs_shape[0], num_actions, k1, num_agents=n, global_state_dim=global_state_dim)
     print("Model:")
     print(model)
     print()
@@ -168,7 +176,10 @@ if __name__ == "__main__":
             r = jnp.asarray(batch["reward"])
             d = jnp.asarray(batch["terminal"]).astype(np.float32)
 
-            model, opt_state, loss_val = train_step(model, opt_state, target_model.network, s0, s1, a, r, d, config.gamma)
+            gs0 = jnp.asarray(batch["gs0"])
+            gs1 = jnp.asarray(batch["gs1"])
+
+            model, opt_state, loss_val = train_step(model, opt_state, target_model.network, s0, s1, a, r, d, gs0, gs1, config.gamma)
             epoch_losses.append(loss_val.item())
 
             target_model.update(model)
@@ -189,20 +200,23 @@ if __name__ == "__main__":
 
             obs_dict, _ = henv.reset(seed=config.seed + num_runs)
             obs_dict = util.value_map(obs_dict, obs_map)
+            gs0 = env.state()
 
             for _ in range(50):
                 key, k1 = random.split(key)
                 all_obs = jnp.concatenate([obs_dict[i][None] for i in agent_names])
-                all_actions = q_policy.get_action(all_obs, k1)
+                all_actions = q_policy.get_action(all_obs, k1, gstate=gs0)
 
                 action_dict = {name: a.item() for name, a in zip(agent_names, all_actions)}
 
                 obs_dict, rewards, terminated, truncated, _ = henv.step(action_dict)
                 obs_dict = util.value_map(obs_dict, obs_map)
+                gs0 = env.state()
 
                 if not henv.agents:
                     obs_dict, _ = henv.reset()
                     obs_dict = util.value_map(obs_dict, obs_map)
+                    gs0 = env.state()
                     num_runs += 1
 
             henv.close()

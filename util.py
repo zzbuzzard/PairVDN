@@ -1,4 +1,5 @@
 import jax
+import jax.numpy as jnp
 import equinox as eqx
 import matplotlib.pyplot as plt
 from os.path import join, isfile
@@ -9,8 +10,6 @@ from pettingzoo.sisl import pursuit_v4
 from pettingzoo.mpe import simple_spread_v3
 import numpy as np
 
-from network import QFunc
-
 
 def save_model(root_path: str, model: eqx.Module):
     path = join(root_path, "model.eqx")
@@ -18,7 +17,7 @@ def save_model(root_path: str, model: eqx.Module):
     eqx.tree_serialise_leaves(path, model)
 
 
-def load_model(root_path: str, model: eqx.Module) -> QFunc:
+def load_model(root_path: str, model: eqx.Module):
     path = join(root_path, "model.eqx")
     if isfile(path):
         print("Deserialising from", path)
@@ -95,3 +94,19 @@ def make_marl_env(name: str, env_kwargs: dict) -> Tuple[pettingzoo.ParallelEnv, 
         return simple_spread_v3.parallel_env(**env_kwargs), lambda x: x
     else:
         raise NotImplementedError(f"Unknown MARL environment '{name}'.")
+
+
+def update_parameter(layer, name, new_value):
+    return eqx.tree_at(lambda l: getattr(l, name), layer, new_value)
+
+
+def update_parameters(layer, names, new_values):
+    for name, new_value in zip(names, new_values):
+        layer = eqx.tree_at(lambda l: getattr(l, name), layer, new_value)
+    return layer
+
+
+def small_init(linear_layer, mul=0.01):
+    new_weight = linear_layer.weight * mul
+    new_bias = jnp.zeros_like(linear_layer.bias)
+    return update_parameters(linear_layer, ["weight", "bias"], [new_weight, new_bias])

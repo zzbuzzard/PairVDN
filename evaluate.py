@@ -83,18 +83,20 @@ def evaluate_multi_agent(config: Config, seed: int, policy: Policy, repeats: int
     env, obs_map = util.make_marl_env(config.env, config.env_kwargs)
     obs_dict, _ = env.reset(seed=seed)
     obs_dict = util.value_map(obs_dict, obs_map)
+    gs0 = env.state()
 
     finished_rewards = []
     agg_reward = 0
 
     while len(finished_rewards) < repeats:
         all_obs = np.concatenate([obs_dict[i][None] for i in agent_names])
-        all_actions = policy.get_action(all_obs, None)
+        all_actions = policy.get_action(all_obs, None, gstate=gs0)
 
         action_dict = {name: a.item() for name, a in zip(agent_names, all_actions)}
 
         obs_dict, rewards, terminated, truncated, _ = env.step(action_dict)
         obs_dict = util.value_map(obs_dict, obs_map)
+        gs0 = env.state()
 
         # Take the total reward across agents as the overall reward
         reward = float(sum(rewards.values()))
@@ -104,6 +106,7 @@ def evaluate_multi_agent(config: Config, seed: int, policy: Policy, repeats: int
             seed += 1
             obs_dict, _ = env.reset()
             obs_dict = util.value_map(obs_dict, obs_map)
+            gs0 = env.state()
 
             finished_rewards.append(agg_reward)
             agg_reward = 0
@@ -135,17 +138,19 @@ def play_multi_agent(config: Config, policy: Policy, agent_names):
     env, obs_map = util.make_marl_env(config.env, config.env_kwargs | {"render_mode": "human"})
     obs_dict, _ = env.reset(seed=0)
     obs_dict = util.value_map(obs_dict, obs_map)
+    gs0 = env.state()
 
     agg_reward = 0
 
     while True:
         all_obs = np.concatenate([obs_dict[i][None] for i in agent_names])
-        all_actions = policy.get_action(all_obs, None)
+        all_actions = policy.get_action(all_obs, None, gstate=gs0)
 
         action_dict = {name: a.item() for name, a in zip(agent_names, all_actions)}
 
         obs_dict, rewards, terminated, truncated, _ = env.step(action_dict)
         obs_dict = util.value_map(obs_dict, obs_map)
+        gs0 = env.state()
 
         # Take the total reward across agents as the overall reward
         reward = float(sum(rewards.values()))
@@ -154,6 +159,7 @@ def play_multi_agent(config: Config, policy: Policy, agent_names):
         if not env.agents:
             obs_dict, _ = env.reset()
             obs_dict = util.value_map(obs_dict, obs_map)
+            gs0 = env.state()
 
             print(f"Total reward: {agg_reward}")
             agg_reward = 0

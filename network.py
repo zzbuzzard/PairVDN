@@ -9,6 +9,8 @@ from jaxtyping import Array, Float, PyTree
 from typing import List
 from abc import ABC, abstractmethod
 
+import util
+
 
 class QFunc(eqx.Module, ABC):
     """
@@ -21,16 +23,16 @@ class QFunc(eqx.Module, ABC):
     """
 
     @abstractmethod
-    def argmax(self, obs):
+    def argmax(self, obs, gstate=None):
         """Return argmax actions given this observation. Formally, argmax_a Q(obs, a)"""
         raise NotImplementedError
 
     @abstractmethod
-    def evaluate(self, obs, actions):
+    def evaluate(self, obs, actions, gstate=None):
         """Return Q(obs, actions)"""
         raise NotImplementedError
 
-    def max(self, obs):
+    def max(self, obs, gstate=None):
         """Return max_a Q(obs, a). Defaults to evaluate(argmax())"""
         actions = self.argmax(obs)
         return self.evaluate(obs, actions)
@@ -56,14 +58,7 @@ class QMLP(QFunc):
         self.layers = layers[:-1]  # remove trailing activation
 
         if final_layer_small_init:
-            # Initialise final layer with smaller values (adapted from equinox docs under 'tricks')
-            lin = self.layers[-1]
-            new_weight = lin.weight * 0.01
-            new_bias = jnp.zeros_like(lin.bias)
-            lin2 = eqx.tree_at(lambda l: l.bias,
-                               eqx.tree_at(lambda l: l.weight, lin, new_weight),
-                               new_bias)
-            self.layers[-1] = lin2
+            self.layers[-1] = util.small_init(self.layers[-1], mul=0.01)
 
     @eqx.filter_jit
     def __call__(self, x):
@@ -71,15 +66,15 @@ class QMLP(QFunc):
             x = f(x)
         return x
 
-    def argmax(self, obs):
+    def argmax(self, obs, gstate=None):
         q_values = vmap(self.__call__)(obs)  # B x A
         return jnp.argmax(q_values, axis=-1)  # B
 
-    def evaluate(self, obs, actions):
+    def evaluate(self, obs, actions, gstate=None):
         q_values = vmap(self.__call__)(obs)  # B x A
         batch_size = obs.shape[0]  # = B
         return q_values[jnp.arange(batch_size), actions]  # B
 
-    def max(self, obs):
+    def max(self, obs, gstate=None):
         q_values = vmap(self.__call__)(obs)  # B x A
         return jnp.max(q_values, axis=-1)  # B
