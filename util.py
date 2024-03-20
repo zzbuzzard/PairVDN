@@ -138,7 +138,10 @@ def update_parameters(layer, names, new_values):
     return layer
 
 
-def small_init(linear_layer, mul=0.01):
+def small_init(linear_layer, mul=0.01, zero_bias=True):
     new_weight = linear_layer.weight * mul
-    new_bias = jnp.zeros_like(linear_layer.bias)
-    return update_parameters(linear_layer, ["weight", "bias"], [new_weight, new_bias])
+    if zero_bias:
+        new_bias = jnp.zeros_like(linear_layer.bias)
+        return update_parameters(linear_layer, ["weight", "bias"], [new_weight, new_bias])
+    else:
+        return update_parameter(linear_layer, "weight", new_weight)

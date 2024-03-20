@@ -85,12 +85,16 @@ def evaluate_multi_agent(config: Config, seed: int, policy: Policy, repeats: int
     obs_dict = util.value_map(obs_dict, obs_map)
     gs0 = env.state()
 
+    finished_qvals = []
     finished_rewards = []
     agg_reward = 0
+    agg_qval = []
 
     while len(finished_rewards) < repeats:
         all_obs = np.concatenate([obs_dict[i][None] for i in agent_names])
         all_actions = policy.get_action(all_obs, None, gstate=gs0)
+        qvalue = policy.network.evaluate(all_obs, all_actions, gstate=gs0)  # TODO: unnecessary double network eval
+        agg_qval.append(qvalue)
 
         action_dict = {name: a.item() for name, a in zip(agent_names, all_actions)}
 
@@ -111,9 +115,12 @@ def evaluate_multi_agent(config: Config, seed: int, policy: Policy, repeats: int
             finished_rewards.append(agg_reward)
             agg_reward = 0
 
+            mean_qval = sum(agg_qval) / len(agg_qval)
+            finished_qvals.append(mean_qval)
+
     rewards = np.array(finished_rewards)
     rewards, std = rewards.mean().item(), rewards.std().item()
-    return rewards, std
+    return rewards, std, sum(finished_qvals) / len(finished_qvals)
 
 
 def play_single_agent(config: Config, policy: Policy):
@@ -206,7 +213,7 @@ if __name__ == "__main__":
     print("Repeats:", args.num_repeats)
 
     if is_marl:
-        r, s = evaluate_multi_agent(config, 0, q_policy, args.num_repeats, agent_names)
+        r, s, _ = evaluate_multi_agent(config, 0, q_policy, args.num_repeats, agent_names)
         print(f"Score {r:.4f} +- {s:.3f}")
     else:
         r, s = evaluate(config, 0, q_policy, args.num_repeats)

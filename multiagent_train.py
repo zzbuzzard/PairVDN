@@ -5,7 +5,7 @@ from jax import random
 import jax.numpy as jnp
 import numpy as np
 import equinox as eqx
-from optax import adam
+import optax
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import argparse
@@ -104,7 +104,7 @@ if __name__ == "__main__":
 
     wandb.init(
         project="RL_Project",
-        name=args.root,
+        name=args.root.split("/")[-1],
         config=asdict(config),
         tags=["MARL"]
     )
@@ -119,11 +119,14 @@ if __name__ == "__main__":
     action_shape = env.action_space(agent_names[0]).sample().shape
     num_actions = env.action_space(agent_names[0]).n
 
+    print("Obs shape:", obs_shape)
+
     all_obs_shape = (n,) + obs_shape
     all_actions_shape = (n,) + action_shape
 
     global_state_shape = env.state_space.sample().shape
     global_state_dim = global_state_shape[0]
+    print("Global state shape:", global_state_shape)
 
     buffer = ExperienceBuffer(config.exp_buffer_len,
                               keys=["all_obs", "all_next_obs", "all_actions", "reward", "terminal", "gs0", "gs1"],
@@ -142,11 +145,15 @@ if __name__ == "__main__":
     target_model = TargetNetwork(model, config.target_network_gamma)
 
     # Load optimiser
-    opt = adam(config.learning_rate)
+    opt = optax.adam(config.learning_rate)
+    # opt = optax.chain(
+    #     optax.clip_by_global_norm(1.0),
+    #     optax.adam(config.learning_rate),
+    # )
     opt_state = opt.init(eqx.filter(model, eqx.is_array))
 
     # Track training stats
-    stats = {"avg_reward": {}, "std_reward": {}, "loss": {}}
+    stats = {"avg_reward": {}, "std_reward": {}, "loss": {}, "mean_q": {}}
 
     # Populate buffer with random data
     print("Populating buffer...")
@@ -194,6 +201,7 @@ if __name__ == "__main__":
             util.save_model(root_dir, model)
 
         if epoch % config.display_every == 0:
+            print("Begin visualisation")
             q_policy = QPolicy(model)
 
             henv, _ = util.make_marl_env(config.env, config.env_kwargs | {"render_mode": "human"})
@@ -202,7 +210,11 @@ if __name__ == "__main__":
             obs_dict = util.value_map(obs_dict, obs_map)
             gs0 = env.state()
 
-            for _ in range(50):
+            for _ in range(800):
+                # unfortunately CookingZoo breaks PettingZoo conventions
+                if hasattr(henv, "render"):
+                    henv.render()
+
                 key, k1 = random.split(key)
                 all_obs = jnp.concatenate([obs_dict[i][None] for i in agent_names])
                 all_actions = q_policy.get_action(all_obs, k1, gstate=gs0)
@@ -220,18 +232,20 @@ if __name__ == "__main__":
                     num_runs += 1
 
             henv.close()
+            print("End visualisation")
 
         if epoch % config.eval_every == 0:
             q_policy = QPolicy(model)
 
             start = time.time()
-            avg_reward, std_reward = evaluate.evaluate_multi_agent(config, seed=epoch, policy=q_policy, repeats=config.eval_reps, agent_names=agent_names)
+            avg_reward, std_reward, mean_q = evaluate.evaluate_multi_agent(config, seed=epoch, policy=q_policy, repeats=config.eval_reps, agent_names=agent_names)
             print(f"Evaluation completed. Took {time.time() - start:.3f}s")
 
             stats["avg_reward"][epoch] = avg_reward
             stats["std_reward"][epoch] = std_reward
+            stats["mean_q"][epoch] = mean_q
 
-            wandb.log({"reward": avg_reward, "epoch": epoch})
+            wandb.log({"reward": avg_reward, "epoch": epoch, "mean_q": mean_q})
 
             # Save stats
             pickle.dump(stats, open(join(root_dir, "stats.pickle"), "wb"))
