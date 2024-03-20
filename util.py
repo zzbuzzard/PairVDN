@@ -5,10 +5,12 @@ import matplotlib.pyplot as plt
 from os.path import join, isfile
 from typing import Tuple, Dict, Callable
 import pettingzoo
+from gymnasium import spaces
 from pettingzoo.butterfly import cooperative_pong_v5, knights_archers_zombies_v10 # , pistonball_v6 # TODO
 from pettingzoo.sisl import pursuit_v4
 from pettingzoo.mpe import simple_spread_v3
 import numpy as np
+from cooking_zoo import environment as cookenv
 
 
 def save_model(root_path: str, model: eqx.Module):
@@ -92,8 +94,38 @@ def make_marl_env(name: str, env_kwargs: dict) -> Tuple[pettingzoo.ParallelEnv, 
         return pursuit_v4.parallel_env(**env_kwargs), np.ndarray.flatten
     elif name == "simple_spread":
         return simple_spread_v3.parallel_env(**env_kwargs), lambda x: x
+    elif name == "cooking":
+        return make_cooking_env(mode=1, **env_kwargs)
+    elif name == "cooking2":
+        return make_cooking_env(mode=2, **env_kwargs)
     else:
         raise NotImplementedError(f"Unknown MARL environment '{name}'.")
+
+
+def make_cooking_env(mode=1, num_agents=2, max_steps=400, render_mode="", **env_kwargs):
+    render = render_mode == "human"
+    obs_spaces = ["feature_vector"] * num_agents
+
+    recipes = ["TomatoLettuceSalad", "CarrotBanana"]
+
+    agent_visualization = ["human"] * num_agents
+    reward_scheme = {"recipe_reward": 20, "max_time_penalty": -5, "recipe_penalty": -20, "recipe_node_reward": 5}  # 0->5
+    action_scheme = "scheme3"
+    if mode == 1:
+        level = "coop_test"
+        meta_file = "example"
+    elif mode == 2:
+        level = "simple"
+        meta_file = "meta_small"
+
+    env = cookenv.cooking_env.parallel_env(level=level, meta_file=meta_file, num_agents=num_agents, max_steps=max_steps,
+                                           recipes=recipes, agent_visualization=agent_visualization,
+                                           obs_spaces=obs_spaces, end_condition_all_dishes=True,
+                                           action_scheme=action_scheme, render=render, reward_scheme=reward_scheme)
+
+    old_state_fn = env.state
+    env.state = lambda: old_state_fn().astype(np.float32)
+    return env, lambda x: x.astype(np.float32)
 
 
 def update_parameter(layer, name, new_value):
