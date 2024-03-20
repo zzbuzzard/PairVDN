@@ -21,7 +21,6 @@ import evaluate
 from network import QFunc
 from target_network import TargetNetwork
 
-
 num_runs = 0
 
 

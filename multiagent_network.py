@@ -79,18 +79,21 @@ class VDN(QFunc):
             return self.qs[0]
         return self.qs[idx]
 
+    @eqx.filter_jit
     def argmax(self, obs, gstate=None):
         actions = []
         for i in range(self.num_agents):
             actions.append(jnp.argmax(self.gq(i)(obs[i])))
         return jnp.array(actions)
 
+    @eqx.filter_jit
     def max(self, obs, gstate=None):
         t = 0
         for i in range(self.num_agents):
             t += jnp.max(self.gq(i)(obs[i]))
         return t
 
+    @eqx.filter_jit
     def evaluate(self, obs, actions, gstate=None):
         t = 0
         for i in range(self.num_agents):
@@ -134,7 +137,25 @@ class QMIX(QFunc):
         self.mk_w1 = nn.Linear(state_dim, out_features=(num_agents * hidden_dim), key=k1)
         self.mk_b1 = nn.Linear(state_dim, out_features=hidden_dim, key=k2)
         self.mk_w2 = nn.Linear(state_dim, out_features=(hidden_dim * 1), key=k3)
-        self.mk_b2 = [nn.Linear(state_dim, hidden_dim//2, key=k4), nn.Linear(hidden_dim//2, 1, key=k5)]
+        self.mk_b2 = [nn.Linear(state_dim, hidden_dim, key=k4), nn.Linear(hidden_dim, 1, key=k5)]
+
+        # def init(layer, w_init_val, s_influence=0.01):
+        #     new_bias = jnp.ones_like(layer.bias) * w_init_val
+        #     layer = util.small_init(layer, zero_bias=False)
+        #     layer = util.update_parameter(layer, "bias", new_bias)
+        #     return layer
+        #
+        # # middle values activate as (1 / sqrt(num_agents)) sum
+        # val = 1 / (num_agents ** 0.5)
+        #
+        # self.mk_w1 = init(self.mk_w1, val, s_influence=0.01)
+        # self.mk_b1 = util.small_init(self.mk_b1, zero_bias=True)
+        # self.mk_w2 = init(self.mk_w2, val, s_influence=0.01)
+        # self.mk_b2 = list(map(lambda x: util.small_init(x, zero_bias=True), self.mk_b2))
+        self.mk_w1 = util.small_init(self.mk_w1, zero_bias=False)
+        self.mk_b1 = util.small_init(self.mk_b1, zero_bias=False)
+        self.mk_w2 = util.small_init(self.mk_w2, zero_bias=False)
+        self.mk_b2[0] = util.small_init(self.mk_b2[0], zero_bias=False)
 
     # get ith implicit Q-network
     def gq(self, idx):
@@ -142,6 +163,7 @@ class QMIX(QFunc):
             return self.qs[0]
         return self.qs[idx]
 
+    @eqx.filter_jit
     def argmax(self, obs, gstate=None):
         assert gstate is not None
 
@@ -164,6 +186,7 @@ class QMIX(QFunc):
 
         return q_out
 
+    @eqx.filter_jit
     def max(self, obs, gstate=None):
         assert gstate is not None
 
@@ -174,6 +197,7 @@ class QMIX(QFunc):
 
         return self._eval(qs, gstate)
 
+    @eqx.filter_jit
     def evaluate(self, obs, actions, gstate=None):
         assert gstate is not None
 
