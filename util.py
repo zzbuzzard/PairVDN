@@ -12,6 +12,8 @@ from pettingzoo.mpe import simple_spread_v3
 import numpy as np
 from cooking_zoo import environment as cookenv
 
+from box_env import BoxJumpEnvironment
+
 
 def save_model(root_path: str, model: eqx.Module):
     path = join(root_path, "model.eqx")
@@ -98,6 +100,8 @@ def make_marl_env(name: str, env_kwargs: dict) -> Tuple[pettingzoo.ParallelEnv, 
         return make_cooking_env(mode=1, **env_kwargs)
     elif name == "cooking2":
         return make_cooking_env(mode=2, **env_kwargs)
+    elif name == "boxjump":
+        return BoxJumpEnvironment(**env_kwargs), lambda x: x
     else:
         raise NotImplementedError(f"Unknown MARL environment '{name}'.")
 
