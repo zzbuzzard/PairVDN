@@ -76,7 +76,7 @@ def value_map(x: Dict, f) -> Dict:
     return {u: f(v) for u, v in x.items()}
 
 
-marl_envs = ["cooperative_pong", "knights_archers_zombies", "pursuit", "simple_spread"]
+marl_envs = ["cooperative_pong", "knights_archers_zombies", "pursuit", "simple_spread", "cooking", "cooking2", "boxjump"]
 
 
 def make_marl_env(name: str, env_kwargs: dict) -> Tuple[pettingzoo.ParallelEnv, Callable]:

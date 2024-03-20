@@ -195,7 +195,12 @@ if __name__ == "__main__":
         obs_shape = obs_map(env.observation_space(agent_names[0]).sample()).shape
         num_actions = env.action_space(agent_names[0]).n
 
-        model = config.get_model(obs_shape[0], num_actions, key, num_agents=num_agents)
+        if hasattr(env, "state_space"):
+            global_state_dim = env.state_space.sample().shape[0]
+        else:
+            global_state_dim = None
+
+        model = config.get_model(obs_shape[0], num_actions, key, num_agents=num_agents, global_state_dim=global_state_dim)
     else:
         env = gym.make(config.env)
         model = config.get_model(env.observation_space.shape[0], env.action_space.n, key)
