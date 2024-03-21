@@ -24,7 +24,8 @@ class BoxAgent:
     def __init__(self, body: Box2D.b2Body):
         self.body = body
         self.yvels = []
-        self.n = 20
+        self.n = 10
+        self.colour = (0, 0, 255)
 
     def step(self):
         self.yvels.append(abs(self.body.linearVelocity.y))
@@ -32,7 +33,7 @@ class BoxAgent:
             self.yvels.pop(0)
 
     def can_jump(self):
-        return len(self.yvels) > 0 and max(self.yvels) < 1
+        return len(self.yvels) >= self.n and max(self.yvels) < 0.5
 
 
 # class ContactDetector(contactListener):
@@ -76,7 +77,7 @@ class BoxJumpEnvironment(ParallelEnv):
     }
 
     def __init__(self, num_boxes=4, world_width=10, world_height=6, box_width=1, box_height=1, render_mode=None,
-                 gravity=10, friction=0.8, spacing=1.5, reward_scheme=1):
+                 gravity=10, friction=0.8, spacing=1.5, reward_scheme=1, angular_damping=1, agent_one_hot=False):
         self.num_boxes = num_boxes
         self.width = world_width
         self.height = world_height
@@ -85,20 +86,26 @@ class BoxJumpEnvironment(ParallelEnv):
         self.gravity = gravity
         self.friction = friction
         self.spacing = spacing
+        self.angular_damping = angular_damping
+        self.agent_one_hot = agent_one_hot
         self.reward_scheme = reward_scheme
         assert reward_scheme in [1, 2]
 
-        low = [0, 0, -5, -5, -math.pi, -5, 0, 0, 0, 0, 0]
-        high = [1, 1, 5, 5, math.pi, 5, 1, 1, 1, 1, 1]
+        low = [0, 0, -5, -5, -0.5, -5, 0, 0, 0, 0, 0]
+        high = [1, 1, 5, 5, 0.5, 5, 1, 1, 1, 1, 1]
         if self.reward_scheme == 2:
             low.append(0)
             high.append(1)
+        if self.agent_one_hot:
+            low += [0] * num_boxes
+            high += [1] * num_boxes
         size = len(low)
         low, high = np.array(low), np.array(high)
         self.obs_space = Box(low, high, shape=[size])
 
         # Construct state_space as a concatenation of subsets of all obs_spaces
-        self.keep_inds = np.array([0, 1, 2, 3, 4, 10])
+        #  (basically just discards per-agent max ob, and per-agent one-hot ob)
+        self.keep_inds = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         low_state = np.repeat(low[self.keep_inds], num_boxes)
         high_state  = np.repeat(high[self.keep_inds], num_boxes)
         if self.reward_scheme == 2:
@@ -142,7 +149,7 @@ class BoxJumpEnvironment(ParallelEnv):
         #  dist above (float)
 
         xs = np.array([box.body.transform.position.x for box in self.boxes])
-        ys = np.array([box.body.transform.position.x for box in self.boxes])
+        ys = np.array([box.body.transform.position.y for box in self.boxes])
 
         xs_i = np.argsort(xs)
         xs_s = xs[xs_i] / W
@@ -163,8 +170,9 @@ class BoxJumpEnvironment(ParallelEnv):
                 above.append(1)
                 below.append((FLOOR_Y - y) / H)
             else:
-                abv = np.logical_and(relevant, ys > y)
-                blw = np.logical_and(relevant, ys < y)
+                # above means SMALLER y value
+                abv = np.logical_and(relevant, ys < y)
+                blw = np.logical_and(relevant, ys > y)
 
                 abv = ((y - np.max(ys[abv])) / H) if np.sum(abv)>0 else 1
                 blw = ((np.min(ys[blw]) - y) / H) if np.sum(blw) > 0 else (FLOOR_Y - y) / H
@@ -176,11 +184,17 @@ class BoxJumpEnvironment(ParallelEnv):
         state = []
         for i in range(self.num_boxes):
             b: BoxAgent = self.boxes[i]
+
+            # A rotation of 90 degrees is equivalent to a rotation of 0 degrees for these boxes
+            #  so just report the number of quarter turns from -1/2 to 1/2, with 0=no rotation
+            quarter_turns = (b.body.angle / (math.pi / 2))  # number of quarter turns
+            quarter_turns = ((quarter_turns + 0.5) % 1.0) - 0.5
+
             ob = [b.body.position.x / W,
                   b.body.position.y / H,
-                  b.body.linearVelocity.x / W / FPS,
-                  b.body.linearVelocity.y / H / FPS,
-                  b.body.angle,
+                  b.body.linearVelocity.x / FPS,
+                  b.body.linearVelocity.y / FPS,
+                  quarter_turns,
                   20 * b.body.angularVelocity / FPS,
                   left[i],   # distance to closest box on the left
                   right[i],  # distance to closest box on the right
@@ -191,6 +205,9 @@ class BoxJumpEnvironment(ParallelEnv):
 
             if self.reward_scheme == 2:
                 ob.append(self.highest_y)
+
+            if self.agent_one_hot:
+                ob += [0] * i + [1] + [0] * (self.num_boxes - i - 1)
 
             ob = np.array(ob, dtype=np.float32)
             obs[self.agents[i]] = ob
@@ -220,13 +237,13 @@ class BoxJumpEnvironment(ParallelEnv):
         self.boxes = []
         total_x = self.spacing * (self.num_boxes - 1)
         x = (W / 2) - (total_x / 2)
-        start_y = FLOOR_Y - self.box_height / 2 - 1
+        start_y = FLOOR_Y - self.box_height / 2 - 0.5
         for i in range(self.num_boxes):
             body = self.world.CreateDynamicBody(position=(x, start_y))
             shape = b2PolygonShape(box=(self.box_width / 2, self.box_height / 2))
             body.CreateFixture(shape=shape, density=1, friction=self.friction)
             x += self.spacing
-            body.angularDamping = 1
+            body.angularDamping = self.angular_damping
 
             body.ApplyForceToCenter((self.np_random.uniform(-150, 150), 0), True)
 
@@ -306,6 +323,8 @@ class BoxJumpEnvironment(ParallelEnv):
         square_image.fill((0, 0, 255))
 
         for b in self.boxes:
+            square_image.fill(b.colour)
+
             position = b.body.position * SCALE
             angle = np.degrees(b.body.angle)
 
@@ -322,7 +341,7 @@ class BoxJumpEnvironment(ParallelEnv):
 if __name__ == "__main__":
     # TEST()
 
-    env = BoxJumpEnvironment(render_mode="human")
+    env = BoxJumpEnvironment(render_mode="human", angular_damping=1, num_boxes=16, spacing=1.1)
 
     n = 0
     obs, _ = env.reset(seed=n)
