@@ -85,6 +85,13 @@ def inverse_permutation(p: np.array):
 
 marl_envs = ["cooperative_pong", "knights_archers_zombies", "pursuit", "simple_spread", "cooking", "cooking2", "boxjump"]
 
+display_steps = {
+    "simple_spread": 40,
+    "cooking": 400,
+    "cooking2": 400,
+    "boxjump": 800
+}
+
 
 def make_marl_env(name: str, env_kwargs: dict) -> Tuple[pettingzoo.ParallelEnv, Callable]:
     """
