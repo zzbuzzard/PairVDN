@@ -6,6 +6,8 @@ import equinox as eqx
 from equinox import nn
 from jaxtyping import Array, Float, PyTree
 from typing import List
+import numpy as np
+import math
 
 import util
 from network import QMLP, QFunc
@@ -139,23 +141,31 @@ class QMIX(QFunc):
         self.mk_w2 = nn.Linear(state_dim, out_features=(hidden_dim * 1), key=k3)
         self.mk_b2 = [nn.Linear(state_dim, hidden_dim, key=k4), nn.Linear(hidden_dim, 1, key=k5)]
 
-        # def init(layer, w_init_val, s_influence=0.01):
-        #     new_bias = jnp.ones_like(layer.bias) * w_init_val
-        #     layer = util.small_init(layer, zero_bias=False)
-        #     layer = util.update_parameter(layer, "bias", new_bias)
-        #     return layer
-        #
-        # # middle values activate as (1 / sqrt(num_agents)) sum
-        # val = 1 / (num_agents ** 0.5)
-        #
-        # self.mk_w1 = init(self.mk_w1, val, s_influence=0.01)
-        # self.mk_b1 = util.small_init(self.mk_b1, zero_bias=True)
-        # self.mk_w2 = init(self.mk_w2, val, s_influence=0.01)
-        # self.mk_b2 = list(map(lambda x: util.small_init(x, zero_bias=True), self.mk_b2))
-        self.mk_w1 = util.small_init(self.mk_w1, zero_bias=False)
-        self.mk_b1 = util.small_init(self.mk_b1, zero_bias=False)
-        self.mk_w2 = util.small_init(self.mk_w2, zero_bias=False)
-        self.mk_b2[0] = util.small_init(self.mk_b2[0], zero_bias=False)
+        # HyperNetwork initialisation as in https://arxiv.org/pdf/2312.08399.pdf
+        w1_weight = (3 / (num_agents * state_dim)) ** 0.5
+        w2_weight = (3 / (hidden_dim * state_dim)) ** 0.5
+        b1_weight = (3 / (2 * state_dim)) ** 0.5
+        b2_weight = (3 / (2 * hidden_dim)) ** 0.5
+        self.mk_w1 = util.custom_init(self.mk_w1, w1_weight, 0, key=k1)
+        self.mk_b1 = util.custom_init(self.mk_b1, b1_weight, 0, key=k2)
+        self.mk_w2 = util.custom_init(self.mk_w2, w2_weight, 0, key=k3)
+        self.mk_b2[1] = util.custom_init(self.mk_b2[1], b2_weight, 0, key=k5)
+
+        # The weights of these layers dictate how important the state is for influencing these parameters
+        # The biases are the initial weights, so should be initialised in the usual way
+        # weight_size = (1 / state_dim**0.5)  # (start with low importance)
+        # bias_size_w1 = bias_size_b1 = 1 / (num_agents ** 0.5)
+        # bias_size_w2 = bias_size_b2 = 1 / (hidden_dim ** 0.5)
+        # self.mk_w1 = util.custom_init(self.mk_w1, weight_size, bias_size_w1, key=k1)
+        # self.mk_b1 = util.custom_init(self.mk_b1, weight_size, bias_size_b1, key=k2)
+        # self.mk_w2 = util.custom_init(self.mk_w2, weight_size, bias_size_w2, key=k3)
+        # self.mk_b2[0] = util.small_init(self.mk_b2[0], zero_bias=True)
+        # self.mk_b2[1] = util.custom_init(self.mk_b2[1], weight_size, bias_size_b2, key=k5)
+
+        # self.mk_w1 = util.small_init(self.mk_w1, zero_bias=False)
+        # self.mk_b1 = util.small_init(self.mk_b1, zero_bias=False)
+        # self.mk_w2 = util.small_init(self.mk_w2, zero_bias=False)
+        # self.mk_b2[0] = util.small_init(self.mk_b2[0], zero_bias=False)
 
     # get ith implicit Q-network
     def gq(self, idx):

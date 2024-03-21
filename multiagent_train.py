@@ -145,7 +145,11 @@ if __name__ == "__main__":
     target_model = TargetNetwork(model, config.target_network_gamma)
 
     # Load optimiser
-    opt = optax.adam(config.learning_rate)
+    if config.opt == "SGD":
+        opt = optax.sgd(config.learning_rate)
+    elif config.opt == "Adam":
+        opt = optax.adam(config.learning_rate)
+    # opt = optax.adam(config.learning_rate)
     # opt = optax.chain(
     #     optax.clip_by_global_norm(1.0),
     #     optax.adam(config.learning_rate),

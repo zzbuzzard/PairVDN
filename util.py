@@ -149,3 +149,10 @@ def small_init(linear_layer, mul=0.01, zero_bias=True):
         return update_parameters(linear_layer, ["weight", "bias"], [new_weight, new_bias])
     else:
         return update_parameter(linear_layer, "weight", new_weight)
+
+
+def custom_init(linear_layer, weight_size, bias_size, key):
+    """Initialises linear_layer with weights ~ U[-weight_size, weight_size], biases ~ U[-bias_size, bias_size]"""
+    new_weight = jax.random.uniform(key, linear_layer.weight.shape, linear_layer.weight.dtype, -weight_size, weight_size)
+    new_bias = jax.random.uniform(key, linear_layer.bias.shape, linear_layer.bias.dtype, -bias_size, bias_size)
+    return update_parameters(linear_layer, ["weight", "bias"], [new_weight, new_bias])

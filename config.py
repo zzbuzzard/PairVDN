@@ -53,6 +53,7 @@ class Config:
     save_every: int = 20
     eval_every: int = 5
     eval_reps: int = 8
+    opt: str = "Adam"
 
     # RL training params
     exp_buffer_len: int = 100000
