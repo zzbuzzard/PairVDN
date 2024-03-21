@@ -15,6 +15,7 @@ import wandb
 from dataclasses import asdict
 from whatis import whatis as wi
 import time
+import gc
 
 from replay_buffer import ExperienceBuffer, batched_dataloader
 import config
@@ -96,6 +97,7 @@ def train_step(model: QFunc, opt_state, target_model: QFunc, s0, s1, a, r, d, gl
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--root", type=str, required=True, help="Path to root directory containing config.json")
+    parser.add_argument("--headless", action="store_true", help="Disable display")
     args = parser.parse_args()
 
     # Load config from config.json
@@ -111,7 +113,7 @@ if __name__ == "__main__":
 
     env, obs_map = util.make_marl_env(config.env, config.env_kwargs)
 
-    agent_names = sorted(env.possible_agents)  # sort for determinacy
+    agent_names = env.possible_agents
     agent_name_to_index = {i: name for i, name in enumerate(agent_names)}
 
     n = len(agent_names)
@@ -204,7 +206,7 @@ if __name__ == "__main__":
         if epoch % config.save_every == 0:
             util.save_model(root_dir, model)
 
-        if epoch % config.display_every == 0:
+        if epoch % config.display_every == 0 and not args.headless:
             # (sanity checking code for PairVDN)
             # print("Sanity checking")
             # qs = model._get_q_out(s0[0])
@@ -222,7 +224,7 @@ if __name__ == "__main__":
             obs_dict = util.value_map(obs_dict, obs_map)
             gs0 = env.state()
 
-            for _ in range(800):
+            for _ in range(util.display_steps.get(config.env, 100)):
                 # unfortunately CookingZoo breaks PettingZoo conventions
                 if hasattr(henv, "render"):
                     henv.render()
@@ -261,6 +263,12 @@ if __name__ == "__main__":
 
             # Save stats
             pickle.dump(stats, open(join(root_dir, "stats.pickle"), "wb"))
+
+            # Unfortunately there is a memory leak somewhere affecting PairVDN
+            #  (without this my laptop will always OOM)
+            if config.model_type == "PairVDN":
+                gc.collect()
+                jax.clear_caches()
 
     # Save final model
     util.save_model(root_dir, model)
