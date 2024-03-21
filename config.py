@@ -38,6 +38,13 @@ class IQLConfig(ModelConfig):
 
 
 @dataclass
+class PairVDNConfig(ModelConfig):
+    hidden_layers: List[int]
+    share_params: bool = False
+    random_order: bool = False
+
+
+@dataclass
 class Config:
     model_config: ModelConfig
     model_type: str
@@ -61,7 +68,7 @@ class Config:
     target_network_gamma: float = 0.99
     exploration_eps_start: float = 1.0
     exploration_eps_end: float = 0.05
-    exploration_lerp_epochs: int = -1   # Number of epochs to interpolate exploration over; -1 for all
+    exploration_lerp_epochs: int = -1  # Number of epochs to interpolate exploration over; -1 for all
     simulation_steps_initial: int = 0  # number of random experiences to add at the start
     simulation_steps_per_epoch: int = 1000  # creates simulation_steps_per_epoch * num_envs datapoints
     num_envs: int = 16
@@ -90,6 +97,8 @@ class Config:
             data["model_config"] = QMIXConfig(**data["model_config"])
         elif data["model_type"] == "IQL":
             data["model_config"] = IQLConfig(**data["model_config"])
+        elif data["model_type"] == "PairVDN":
+            data["model_config"] = PairVDNConfig(**data["model_config"])
         else:
             raise NotImplementedError(f"Unknown model type '{data['model_type']}'")
 
@@ -97,20 +106,30 @@ class Config:
 
     def get_model(self, input_dim, output_dim, key, global_state_dim=None, num_agents=None):
         if self.model_type == "QMLP":
-            return network.QMLP(input_dim, output_dim, self.model_config.hidden_layers, self.final_layer_small_init, key)
+            return network.QMLP(input_dim, output_dim, self.model_config.hidden_layers, self.final_layer_small_init,
+                                key)
         elif self.model_type == "VDN":
             return multiagent_network.VDN(num_agents, self.model_config.share_params, key, input_dim=input_dim,
-                       output_dim=output_dim, hidden_layers=self.model_config.hidden_layers,
-                       final_layer_small_init=self.final_layer_small_init)
+                                          output_dim=output_dim, hidden_layers=self.model_config.hidden_layers,
+                                          final_layer_small_init=self.final_layer_small_init)
         elif self.model_type == "QMIX":
             assert global_state_dim is not None
-            return multiagent_network.QMIX(num_agents, self.model_config.share_params, global_state_dim, self.model_config.hidden_dim,
-                        key, input_dim=input_dim, output_dim=output_dim, hidden_layers=self.model_config.hidden_layers,
-                        final_layer_small_init=self.final_layer_small_init)
+            return multiagent_network.QMIX(num_agents, self.model_config.share_params, global_state_dim,
+                                           self.model_config.hidden_dim,
+                                           key, input_dim=input_dim, output_dim=output_dim,
+                                           hidden_layers=self.model_config.hidden_layers,
+                                           final_layer_small_init=self.final_layer_small_init)
         elif self.model_type == "IQL":
-            return multiagent_network.IndividualQ(num_agents, self.model_config.share_params, key, input_dim=input_dim, output_dim=output_dim,
-                               hidden_layers=self.model_config.hidden_layers,
-                               final_layer_small_init=self.final_layer_small_init)
+            return multiagent_network.IndividualQ(num_agents, self.model_config.share_params, key, input_dim=input_dim,
+                                                  output_dim=output_dim,
+                                                  hidden_layers=self.model_config.hidden_layers,
+                                                  final_layer_small_init=self.final_layer_small_init)
+        elif self.model_type == "PairVDN":
+            return multiagent_network.PairVDN(num_agents, self.model_config.share_params,
+                                              self.model_config.random_order,
+                                              key, input_dim=input_dim, output_dim=output_dim,
+                                              hidden_layers=self.model_config.hidden_layers,
+                                              final_layer_small_init=self.final_layer_small_init)
         else:
             raise NotImplementedError(f"Unknown model '{self.model_type}'.")
 

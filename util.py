@@ -76,6 +76,13 @@ def value_map(x: Dict, f) -> Dict:
     return {u: f(v) for u, v in x.items()}
 
 
+def inverse_permutation(p: np.array):
+    """Inverts a permutation represented as an array of unique integers 0..n-1"""
+    s = np.empty_like(p)
+    s[p] = np.arange(p.size)
+    return s
+
+
 marl_envs = ["cooperative_pong", "knights_archers_zombies", "pursuit", "simple_spread", "cooking", "cooking2", "boxjump"]
 
 

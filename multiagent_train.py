@@ -205,6 +205,14 @@ if __name__ == "__main__":
             util.save_model(root_dir, model)
 
         if epoch % config.display_every == 0:
+            # (sanity checking code for PairVDN)
+            # print("Sanity checking")
+            # qs = model._get_q_out(s0[0])
+            # a, t = model._maximise(qs)
+            # ra, rt = model._maximise_naive(qs)
+            # print(ra, a)
+            # print(rt, t)
+
             print("Begin visualisation")
             q_policy = QPolicy(model)
 
