@@ -77,7 +77,8 @@ class BoxJumpEnvironment(ParallelEnv):
     }
 
     def __init__(self, num_boxes=4, world_width=10, world_height=6, box_width=1, box_height=1, render_mode=None,
-                 gravity=10, friction=0.8, spacing=1.5, reward_scheme=1, angular_damping=1, agent_one_hot=False):
+                 gravity=10, friction=0.8, spacing=1.5, reward_scheme=1, angular_damping=1, agent_one_hot=False,
+                 max_timestep=400, fixed_rotation=False):
         self.num_boxes = num_boxes
         self.width = world_width
         self.height = world_height
@@ -88,12 +89,19 @@ class BoxJumpEnvironment(ParallelEnv):
         self.spacing = spacing
         self.angular_damping = angular_damping
         self.agent_one_hot = agent_one_hot
+        self.max_timestep = max_timestep
+        self.fixed_rotation = fixed_rotation
         self.reward_scheme = reward_scheme
-        assert reward_scheme in [1, 2]
+        assert reward_scheme in [1, 2, 3, 4]
 
         low = [0, 0, -5, -5, -0.5, -5, 0, 0, 0, 0, 0]
         high = [1, 1, 5, 5, 0.5, 5, 1, 1, 1, 1, 1]
         if self.reward_scheme == 2:
+            # current best height: from 0..1
+            low.append(0)
+            high.append(1)
+        elif self.reward_scheme == 3:
+            # time elapsed: from 0..1
             low.append(0)
             high.append(1)
         if self.agent_one_hot:
@@ -108,7 +116,7 @@ class BoxJumpEnvironment(ParallelEnv):
         self.keep_inds = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         low_state = np.repeat(low[self.keep_inds], num_boxes)
         high_state  = np.repeat(high[self.keep_inds], num_boxes)
-        if self.reward_scheme == 2:
+        if self.reward_scheme in [2, 3]:
             low_state = np.concatenate((low_state, [0]))
             high_state = np.concatenate((high_state, [1]))
         size = low_state.shape[0]
@@ -205,6 +213,8 @@ class BoxJumpEnvironment(ParallelEnv):
 
             if self.reward_scheme == 2:
                 ob.append(self.highest_y)
+            elif self.reward_scheme == 3:
+                ob.append(self.timestep / self.max_timestep)
 
             if self.agent_one_hot:
                 ob += [0] * i + [1] + [0] * (self.num_boxes - i - 1)
@@ -215,6 +225,8 @@ class BoxJumpEnvironment(ParallelEnv):
 
         if self.reward_scheme == 2:
             state.append(np.array([self.highest_y]))  # only include once
+        elif self.reward_scheme == 3:
+            state.append(np.array([self.timestep / self.max_timestep]))  # only include once
         self._state = np.concatenate(state)
 
         return obs
@@ -244,6 +256,7 @@ class BoxJumpEnvironment(ParallelEnv):
             body.CreateFixture(shape=shape, density=1, friction=self.friction)
             x += self.spacing
             body.angularDamping = self.angular_damping
+            body.fixedRotation = self.fixed_rotation
 
             body.ApplyForceToCenter((self.np_random.uniform(-150, 150), 0), True)
 
@@ -289,6 +302,13 @@ class BoxJumpEnvironment(ParallelEnv):
                 rewards[i] = max_height_above_floor / self.num_boxes
             elif self.reward_scheme == 2:
                 rewards[i] = (new_best - prev_best) / self.num_boxes
+            elif self.reward_scheme == 3:
+                time = self.timestep / self.max_timestep
+                rewards[i] = time * max_height_above_floor / self.num_boxes
+            elif self.reward_scheme == 4:
+                xs = np.array([b.body.position.x / W for b in self.boxes])
+                xstd = np.var(xs)
+                rewards[i] = (max_height_above_floor - xstd) / self.num_boxes
 
         self.world.Step(1 / FPS, 30, 30)
         self.timestep += 1
@@ -297,7 +317,7 @@ class BoxJumpEnvironment(ParallelEnv):
 
         # Check truncation conditions (overwrites termination conditions)
         truncations = {a: False for a in self.agents}
-        if self.timestep > 400:
+        if self.timestep > self.max_timestep:
             rewards = {a: 0 for a in self.agents}
             truncations = {a: True for a in self.agents}
 
