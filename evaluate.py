@@ -60,7 +60,8 @@ def evaluate_sequential(config: Config, seed: int, policy: Policy, repeats: int)
     key = jax.random.PRNGKey(0)
 
     while len(finished_rewards) < repeats:
-        action = policy.get_action(state[None], None)[0]  # no key given; policy should be the deterministic Q-policy
+        key, k = jax.random.split(key)
+        action = policy.get_action(state[None], k)[0]
         action = np.array(action)
 
         state, reward, terminated, truncated, _ = env.step(action)
