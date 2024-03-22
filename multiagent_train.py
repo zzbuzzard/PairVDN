@@ -1,5 +1,4 @@
 import pettingzoo
-from pettingzoo.butterfly import cooperative_pong_v5
 import jax
 from jax import random
 import jax.numpy as jnp
@@ -13,7 +12,6 @@ from os.path import join
 import pickle
 import wandb
 from dataclasses import asdict
-from whatis import whatis as wi
 import time
 import gc
 

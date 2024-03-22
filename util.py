@@ -5,12 +5,12 @@ import matplotlib.pyplot as plt
 from os.path import join, isfile
 from typing import Tuple, Dict, Callable
 import pettingzoo
+from supersuit import agent_indicator_v0, flatten_v0
 from gymnasium import spaces
 from pettingzoo.butterfly import cooperative_pong_v5, knights_archers_zombies_v10 # , pistonball_v6 # TODO
 from pettingzoo.sisl import pursuit_v4
 from pettingzoo.mpe import simple_spread_v3
 import numpy as np
-from cooking_zoo import environment as cookenv
 
 from box_env import BoxJumpEnvironment
 
@@ -107,7 +107,12 @@ def make_marl_env(name: str, env_kwargs: dict) -> Tuple[pettingzoo.ParallelEnv, 
     elif name == "pursuit":
         # Note: surround=False is a much easier version of this game
         # Note: (7 x 7 x 3) spatial input, CNN arch would be better than flattening
-        return pursuit_v4.parallel_env(**env_kwargs), np.ndarray.flatten
+
+        env = pursuit_v4.parallel_env(**env_kwargs)
+        env = agent_indicator_v0(flatten_v0(env))
+        env.state_space = spaces.Box(0,1,(1,))
+        env.state = lambda: env.state_space.sample()
+        return env, lambda x: x
     elif name == "simple_spread":
         return simple_spread_v3.parallel_env(**env_kwargs), lambda x: x
     elif name == "cooking":
@@ -121,6 +126,8 @@ def make_marl_env(name: str, env_kwargs: dict) -> Tuple[pettingzoo.ParallelEnv, 
 
 
 def make_cooking_env(mode=1, num_agents=2, max_steps=400, render_mode="", **env_kwargs):
+    from cooking_zoo import environment as cookenv
+
     render = render_mode == "human"
     obs_spaces = ["feature_vector"] * num_agents
 
@@ -170,3 +177,4 @@ def custom_init(linear_layer, weight_size, bias_size, key):
     new_weight = jax.random.uniform(key, linear_layer.weight.shape, linear_layer.weight.dtype, -weight_size, weight_size)
     new_bias = jax.random.uniform(key, linear_layer.bias.shape, linear_layer.bias.dtype, -bias_size, bias_size)
     return update_parameters(linear_layer, ["weight", "bias"], [new_weight, new_bias])
+
