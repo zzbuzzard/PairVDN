@@ -1,0 +1,29 @@
+{
+	"env": "boxjump",
+	"env_kwargs": {"reward_scheme": 2, "agent_one_hot": true, "num_boxes": 16, "fixed_rotation": false},
+    "seed": 0,
+	
+    "batch_size": 32,
+    "num_epochs": 100,
+    "learning_rate": 1e-4,
+    "display_every": 25,
+	"save_every": 10,
+	"eval_every": 10,
+	"eval_reps": 5,
+	"opt": "SGD",
+
+    "exp_buffer_len": 20000,
+    "gamma": 0.99,
+	"target_network_gamma": 0.99,
+    "exploration_eps_start": 1.0,
+    "exploration_eps_end": 0.05,
+	"exploration_lerp_epochs": 100,
+    "simulation_steps_per_epoch": 400,
+    "simulation_steps_initial": 5000,
+
+	"model_type": "IQL",
+	"model_config": {
+		"hidden_layers": [128, 128],
+		"share_params": true
+	}
+}
