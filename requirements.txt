@@ -1,0 +1,16 @@
+swig
+box2d-py
+equinox
+gymnasium
+jax
+jaxtyping
+matplotlib
+numpy
+optax
+pettingzoo
+pygame
+pytz
+seaborn
+supersuit
+tqdm
+wandb
