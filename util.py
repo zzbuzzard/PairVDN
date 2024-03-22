@@ -125,23 +125,24 @@ def make_marl_env(name: str, env_kwargs: dict) -> Tuple[pettingzoo.ParallelEnv, 
         raise NotImplementedError(f"Unknown MARL environment '{name}'.")
 
 
-def make_cooking_env(mode=1, num_agents=2, max_steps=400, render_mode="", **env_kwargs):
+def make_cooking_env(mode=1, max_steps=400, render_mode="", **env_kwargs):
     from cooking_zoo import environment as cookenv
 
-    render = render_mode == "human"
-    obs_spaces = ["feature_vector"] * num_agents
-
-    recipes = ["TomatoLettuceSalad", "CarrotBanana"]
-
-    agent_visualization = ["human"] * num_agents
-    reward_scheme = {"recipe_reward": 20, "max_time_penalty": -5, "recipe_penalty": -20, "recipe_node_reward": 5}  # 0->5
-    action_scheme = "scheme3"
     if mode == 1:
+        num_agents = 2
         level = "coop_test"
         meta_file = "example"
     elif mode == 2:
+        num_agents = 3
         level = "simple"
         meta_file = "meta_small"
+
+    render = render_mode == "human"
+    obs_spaces = ["feature_vector"] * num_agents
+    recipes = ["TomatoLettuceSalad"] * num_agents
+    agent_visualization = ["human"] * num_agents
+    reward_scheme = {"recipe_reward": 20, "max_time_penalty": -5, "recipe_penalty": -20, "recipe_node_reward": 5}  # 0->5
+    action_scheme = "scheme3"
 
     env = cookenv.cooking_env.parallel_env(level=level, meta_file=meta_file, num_agents=num_agents, max_steps=max_steps,
                                            recipes=recipes, agent_visualization=agent_visualization,
