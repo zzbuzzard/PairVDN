@@ -1,6 +1,7 @@
 import functools
 import random
 from copy import copy
+import colorsys
 
 import math
 import numpy as np
@@ -10,22 +11,16 @@ from pettingzoo import ParallelEnv
 import pygame
 from Box2D import b2World, b2PolygonShape
 import Box2D
-from Box2D.b2 import (
-    circleShape,
-    contactListener,
-    edgeShape,
-    fixtureDef,
-    polygonShape,
-    revoluteJointDef,
-)
 
 
 class BoxAgent:
-    def __init__(self, body: Box2D.b2Body):
+    def __init__(self, body: Box2D.b2Body, h: float = 0.666, v: float = 1, s: float = 1):
         self.body = body
         self.yvels = []
         self.n = 10
-        self.colour = (0, 0, 255)
+
+        r, g, b = colorsys.hsv_to_rgb(h, s, v)
+        self.colour = (int(r*255), int(g*255), int(b*255))
 
     def step(self):
         self.yvels.append(abs(self.body.linearVelocity.y))
@@ -159,21 +154,27 @@ class BoxJumpEnvironment(ParallelEnv):
         xs = np.array([box.body.transform.position.x for box in self.boxes])
         ys = np.array([box.body.transform.position.y for box in self.boxes])
 
-        xs_i = np.argsort(xs)
-        xs_s = xs[xs_i] / W
-        left = np.concatenate(([1], xs_s[1:] - xs_s[:-1]))[xs_i]
-        right = np.concatenate((xs_s[1:] - xs_s[:-1], [1]))[xs_i]
+        # xs_i = np.argsort(xs)
+        # xs_s = xs[xs_i] / W
+        # left = np.concatenate(([1], xs_s[1:] - xs_s[:-1]))[xs_i]
+        # right = np.concatenate((xs_s[1:] - xs_s[:-1], [1]))[xs_i]
 
         # Todo: O(N^2) algo below could be replaced with a more efficient left-to-right sweep algorithm
         above = []
         below = []
 
+        left = []
+        right = []
+
+        h = self.box_height / 2
         w = self.box_width / 2
+        threshold = 0.1  # how much they must overlap by to register
+
         for i in range(self.num_boxes):
             # Extract boxes which overlap horizontally with this box
             x = xs[i]
             y = ys[i]
-            relevant = np.logical_and(xs - w < x, xs + w > x)
+            relevant = np.logical_and(xs - w < x + w - threshold, xs + w > x - w + threshold)
             if np.sum(relevant) == 1:
                 above.append(1)
                 below.append((FLOOR_Y - y) / H)
@@ -188,6 +189,21 @@ class BoxJumpEnvironment(ParallelEnv):
                 above.append(abv)
                 below.append(blw)
 
+            # Repeat for left/right
+            relevant = np.logical_and(ys - h < y + h - threshold, ys + h > y - h + threshold)
+            if np.sum(relevant) == 1:
+                left.append(1)
+                right.append(1)
+            else:
+                lft = np.logical_and(relevant, xs < x)
+                rgt = np.logical_and(relevant, xs > x)
+
+                lft = ((x - np.max(xs[lft])) / W) if np.sum(lft) > 0 else 1
+                rgt = ((np.min(xs[rgt]) - x) / W) if np.sum(rgt) > 0 else 1
+
+                left.append(lft)
+                right.append(rgt)
+
         obs = {}
         state = []
         for i in range(self.num_boxes):
@@ -197,6 +213,9 @@ class BoxJumpEnvironment(ParallelEnv):
             #  so just report the number of quarter turns from -1/2 to 1/2, with 0=no rotation
             quarter_turns = (b.body.angle / (math.pi / 2))  # number of quarter turns
             quarter_turns = ((quarter_turns + 0.5) % 1.0) - 0.5
+
+            # (red if can jump, blue otherwise)
+            # self.boxes[i].colour = (255, 0, 0) if int(b.can_jump()) else (0, 0, 255)
 
             ob = [b.body.position.x / W,
                   b.body.position.y / H,
@@ -238,6 +257,9 @@ class BoxJumpEnvironment(ParallelEnv):
         self.np_random = np.random.default_rng(seed)
         self._state = None
         self.world = b2World(gravity=(0, self.gravity), doSleep=True)
+
+        # TODO: This should be 0 or None; causes a guaranteed reward of 1 at step 1
+        #  (I don't want to change the reward system post-training)
         self.highest_y = -1
 
         if self.render_mode == "human" and self.screen is None:
@@ -260,7 +282,10 @@ class BoxJumpEnvironment(ParallelEnv):
 
             body.ApplyForceToCenter((self.np_random.uniform(-150, 150), 0), True)
 
-            self.boxes.append(BoxAgent(body))
+            # (a nice blue gradient I made up)
+            hue = (i / self.num_boxes) * 0.2 + 0.5
+            val = (i / self.num_boxes) * 0.2 + 0.8
+            self.boxes.append(BoxAgent(body, hue, val))
 
         # Make floor
         floor_body = self.world.CreateStaticBody(position=(0, H))
@@ -292,6 +317,8 @@ class BoxJumpEnvironment(ParallelEnv):
                 if self.boxes[idx].can_jump():
                     body.ApplyForceToCenter((0, -250), True)
 
+            # height_above_floor = 0 -> you are on the floor
+            # height_above_floor = 1 -> the bottom of your square has just exited the screen off the top
             height_above_floor = (FLOOR_Y - self.boxes[idx].body.position.y - self.box_height / 2) / FLOOR_Y
             if height_above_floor > new_best:
                 new_best = height_above_floor
@@ -307,8 +334,7 @@ class BoxJumpEnvironment(ParallelEnv):
                 rewards[i] = time * max_height_above_floor / self.num_boxes
             elif self.reward_scheme == 4:
                 xs = np.array([b.body.position.x / W for b in self.boxes])
-                xstd = np.var(xs)
-                rewards[i] = (max_height_above_floor - xstd) / self.num_boxes
+                rewards[i] = -np.sum((xs - 0.5) ** 2) / (self.num_boxes ** 2)
 
         self.world.Step(1 / FPS, 30, 30)
         self.timestep += 1

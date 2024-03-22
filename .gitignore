@@ -1,4 +1,6 @@
-models
+models/
+models_old/
+pics/
 wandb
 
 # Byte-compiled / optimized / DLL files
