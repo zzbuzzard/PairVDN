@@ -3,6 +3,39 @@ TL;DR models are in `models` and some are included in the repo; the most relevan
 is probably `train.py` / `policy.py` / `network.py` and `multiagent_train.py` / `multiagent_network.py`
 for the extension.
 
+## Replicating Results
+The models are included so you should be able to replicate everything.
+
+### Lunar-lander
+Table 1:
+```
+python evaluate.py -r lunar_lander/128_128_128 -n 50
+# or '256_256', or '4096'
+```
+This will calculate one row of tab 1 and then start a pygame visualisation so you can see some
+exciting lunar landing action. Oh yeah, it'll print the parallel score (which is biased
+towards shorter runs, but much faster) and then the sequential score (which is what I
+actually report).
+
+Figure 2: Same as above; evaluate.py will plot the loss and reward graph for the given model.
+
+### Multi-agent stuff
+Table 2 and figure 4:
+```
+python evaluate.py -r [box_8_rot | box_16_fixed | box_16_rot | simple_spread]/[iql | vdn | qmix | pvdn] -n 20
+```
+Unfortunately `cooking2` is in the repo but will not work as I made some changes to
+CookingZoo locally and didn't create a branch or put it inside this repo.
+
+Example:
+```
+python evaluate.py -r box_16_rot/pvdn -n 1 --max_timestep 1000
+```
+`-n 1` because the calculation is very slow for box_env with 16 agents - this will just
+show the agents jumping around with an extended max_timestep.
+
+
+
 ## Usage
 `train.py`, `evaluate.py` and `multiagent_train.py` can all be run with argument `-r`
 specifying the root directory of the model e.g.
@@ -57,7 +90,6 @@ haven't created a branch).
 
 
 ## Setup
-If you actually intend to run the code, hopefully this will work
 ```
 pip install swig
 pip install -r requirements.txt

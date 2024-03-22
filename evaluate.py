@@ -217,6 +217,10 @@ if __name__ == "__main__":
     env.close()
     model = util.load_model(root_dir, model)
 
+    params, static = eqx.partition(model, eqx.is_array)
+    param_count = sum(x.size for x in jax.tree_leaves(params))
+    print(f"Parameter count: {param_count}")
+
     q_policy = QPolicy(model)
 
     # Load stats
