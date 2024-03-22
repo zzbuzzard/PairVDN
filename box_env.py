@@ -359,7 +359,7 @@ class BoxJumpEnvironment(ParallelEnv):
 
         return obs, rewards, terminations, truncations, infos
 
-    def render(self):
+    def render(self, save_path=None):
         if self.render_mode is None:
             return
 
@@ -382,6 +382,10 @@ class BoxJumpEnvironment(ParallelEnv):
         pygame.draw.rect(self.screen, (0, 0, 0), (0, FLOOR_Y * SCALE, W * SCALE, (H - FLOOR_Y) * SCALE))
 
         pygame.display.flip()
+
+        if save_path is not None:
+            print("Saving render to", save_path)
+            pygame.image.save(self.screen, save_path)
 
 
 if __name__ == "__main__":

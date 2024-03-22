@@ -139,7 +139,7 @@ def make_cooking_env(mode=1, max_steps=400, render_mode="", **env_kwargs):
 
     render = render_mode == "human"
     obs_spaces = ["feature_vector"] * num_agents
-    recipes = ["TomatoLettuceSalad"] * num_agents
+    recipes = ["TomatoLettuceSalad"] + ["CarrotBanana"] * (num_agents-1)
     agent_visualization = ["human"] * num_agents
     reward_scheme = {"recipe_reward": 20, "max_time_penalty": -5, "recipe_penalty": -20, "recipe_node_reward": 5}  # 0->5
     action_scheme = "scheme3"

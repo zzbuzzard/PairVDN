@@ -57,6 +57,8 @@ def evaluate_sequential(config: Config, seed: int, policy: Policy, repeats: int)
     finished_rewards = []
     agg_reward = 0
 
+    key = jax.random.PRNGKey(0)
+
     while len(finished_rewards) < repeats:
         action = policy.get_action(state[None], None)[0]  # no key given; policy should be the deterministic Q-policy
         action = np.array(action)
@@ -89,12 +91,14 @@ def evaluate_multi_agent(config: Config, seed: int, policy: Policy, repeats: int
     finished_rewards = []
     agg_reward = 0
     agg_qval = []
+    key = jax.random.PRNGKey(0)
 
     while len(finished_rewards) < repeats:
+        key, k = jax.random.split(key)
         all_obs = np.concatenate([obs_dict[i][None] for i in agent_names])
-        all_actions = policy.get_action(all_obs, None, gstate=gs0)
         qvalue = policy.network.evaluate(all_obs, all_actions, gstate=gs0)  # TODO: unnecessary double network eval
         agg_qval.append(qvalue)
+        all_actions = policy.get_action(all_obs, k, gstate=gs0)
 
         action_dict = {name: a.item() for name, a in zip(agent_names, all_actions)}
 
