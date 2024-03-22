@@ -57,7 +57,7 @@ def evaluate_sequential(config: Config, seed: int, policy: Policy, repeats: int)
     finished_rewards = []
     agg_reward = 0
 
-    key = jax.random.PRNGKey(0)
+    key = jax.random.PRNGKey(0)  # won't be used in general; policy will be deterministic Q-policy
 
     while len(finished_rewards) < repeats:
         key, k = jax.random.split(key)
@@ -92,14 +92,14 @@ def evaluate_multi_agent(config: Config, seed: int, policy: Policy, repeats: int
     finished_rewards = []
     agg_reward = 0
     agg_qval = []
-    key = jax.random.PRNGKey(0)
+    key = jax.random.PRNGKey(0)  # won't be used in general; policy will be deterministic Q-policy
 
     while len(finished_rewards) < repeats:
         key, k = jax.random.split(key)
         all_obs = np.concatenate([obs_dict[i][None] for i in agent_names])
+        all_actions = policy.get_action(all_obs, k, gstate=gs0)
         qvalue = policy.network.evaluate(all_obs, all_actions, gstate=gs0)  # TODO: unnecessary double network eval
         agg_qval.append(qvalue)
-        all_actions = policy.get_action(all_obs, k, gstate=gs0)
 
         action_dict = {name: a.item() for name, a in zip(agent_names, all_actions)}
 
@@ -181,12 +181,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--root", type=str, required=True, help="Path to root directory containing config.json")
     parser.add_argument("-n", "--num_repeats", type=int, default=20)
+    parser.add_argument("--max_timestep", type=int, default=-1)
 
     args = parser.parse_args()
 
     # Load config from config.json
     root_dir = join("models", args.root)
     config = Config.load(root_dir)
+
+    if args.max_timestep != -1:
+        config.env_kwargs["max_timestep"] = args.max_timestep
 
     is_marl = config.env in util.marl_envs
 
