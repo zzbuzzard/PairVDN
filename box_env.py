@@ -18,6 +18,7 @@ class BoxAgent:
         self.body = body
         self.yvels = []
         self.n = 10
+        self.fallen = False
 
         r, g, b = colorsys.hsv_to_rgb(h, s, v)
         self.colour = (int(r*255), int(g*255), int(b*255))
@@ -58,6 +59,7 @@ VIEWPORT_H = 400
 SCALE = 20  # Scale from pygame units to pixels
 FPS = 40
 MAX_HOR_SPD = 2
+NEGATIVE_THRESHOLD = -0.001
 
 # H, W are in (Py)game units
 W = VIEWPORT_W / SCALE
@@ -67,13 +69,21 @@ FLOOR_Y = 15
 
 
 class BoxJumpEnvironment(ParallelEnv):
+    """
+    Reward modes:
+        highest - reward only given if a new best height is achieved this frame
+        highest_stable - same as highest but only considers boxes which are stable i.e. not mid-jump
+        height_sq - each agent rewarded by its current height squared at each step
+    """
+
     metadata = {
         "name": "custom_environment_v0",
     }
 
     def __init__(self, num_boxes=4, world_width=10, world_height=6, box_width=1, box_height=1, render_mode=None,
-                 gravity=10, friction=0.8, spacing=1.5, reward_scheme=1, angular_damping=1, agent_one_hot=False,
-                 max_timestep=400, fixed_rotation=False):
+                 gravity=10, friction=0.8, spacing=1.5, random_spacing=0.5, angular_damping=1, agent_one_hot=False,
+                 max_timestep=400, fixed_rotation=False, reward_mode: str = "highest", include_time: bool = True,
+                 include_highest: bool = True, penalty_fall: float = 20):
         self.num_boxes = num_boxes
         self.width = world_width
         self.height = world_height
@@ -82,20 +92,26 @@ class BoxJumpEnvironment(ParallelEnv):
         self.gravity = gravity
         self.friction = friction
         self.spacing = spacing
+        self.random_spacing = random_spacing
         self.angular_damping = angular_damping
         self.agent_one_hot = agent_one_hot
         self.max_timestep = max_timestep
         self.fixed_rotation = fixed_rotation
-        self.reward_scheme = reward_scheme
-        assert reward_scheme in [1, 2, 3, 4]
+        self.penalty_fall = penalty_fall
 
-        low = [0, 0, -5, -5, -0.5, -5, 0, 0, 0, 0, 0]
-        high = [1, 1, 5, 5, 0.5, 5, 1, 1, 1, 1, 1]
-        if self.reward_scheme == 2:
+        self.include_time = include_time
+        self.include_highest = include_highest
+
+        assert reward_mode in ["highest", "highest_stable", "height_sq", "stable_sum"]
+        self.reward_mode = reward_mode
+
+        low = [-1, -1, -2, -2, -0.5, -2, 0, 0, 0, 0, 0]
+        high = [1, self.num_boxes, 2, 2, 0.5, 2, 1, 1, 1, 1, 1]
+        if self.include_highest:
             # current best height: from 0..1
             low.append(0)
-            high.append(1)
-        elif self.reward_scheme == 3:
+            high.append(self.num_boxes)
+        if self.include_time:
             # time elapsed: from 0..1
             low.append(0)
             high.append(1)
@@ -111,9 +127,15 @@ class BoxJumpEnvironment(ParallelEnv):
         self.keep_inds = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         low_state = np.repeat(low[self.keep_inds], num_boxes)
         high_state  = np.repeat(high[self.keep_inds], num_boxes)
-        if self.reward_scheme in [2, 3]:
+
+        if self.include_highest:
+            low_state = np.concatenate((low_state, [0]))
+            high_state = np.concatenate((high_state, [self.num_boxes]))
+
+        if self.include_time:
             low_state = np.concatenate((low_state, [0]))
             high_state = np.concatenate((high_state, [1]))
+
         size = low_state.shape[0]
         self.state_space = Box(low=low_state, high=high_state, shape=[size])
 
@@ -124,7 +146,7 @@ class BoxJumpEnvironment(ParallelEnv):
 
         self.render_mode = render_mode
         self.screen = None
-        self.highest_y = -1
+        self.highest_y = 0
 
     @functools.lru_cache(maxsize=None)
     def action_space(self, _):
@@ -217,12 +239,21 @@ class BoxJumpEnvironment(ParallelEnv):
             # (red if can jump, blue otherwise)
             # self.boxes[i].colour = (255, 0, 0) if int(b.can_jump()) else (0, 0, 255)
 
-            ob = [b.body.position.x / W,
-                  b.body.position.y / H,
-                  b.body.linearVelocity.x / FPS,
-                  b.body.linearVelocity.y / FPS,
+            # 0 = you are on the floor
+            # n = you are n boxes in height (so one box standing on another gets a score of 1)
+            height_above_floor = (FLOOR_Y - b.body.position.y - self.box_height / 2) / self.box_height
+            if height_above_floor < NEGATIVE_THRESHOLD:
+                height_above_floor = -1
+
+            # -1 = left, 0 = middle, 1 = right
+            xpos = (b.body.position.x / W) * 2 - 1
+
+            ob = [xpos,
+                  height_above_floor,  # y position, -1 to n
+                  b.body.linearVelocity.x / FPS * 20,  # constants chosen to scale approxmiately to [-1, 1]
+                  b.body.linearVelocity.y / FPS * 5,
                   quarter_turns,
-                  20 * b.body.angularVelocity / FPS,
+                  b.body.angularVelocity / FPS * 20,
                   left[i],   # distance to closest box on the left
                   right[i],  # distance to closest box on the right
                   above[i],  # distance to closest box above which overlaps horizontally
@@ -230,9 +261,9 @@ class BoxJumpEnvironment(ParallelEnv):
                   int(b.can_jump())
             ]
 
-            if self.reward_scheme == 2:
+            if self.include_highest:
                 ob.append(self.highest_y)
-            elif self.reward_scheme == 3:
+            if self.include_time:
                 ob.append(self.timestep / self.max_timestep)
 
             if self.agent_one_hot:
@@ -242,9 +273,9 @@ class BoxJumpEnvironment(ParallelEnv):
             obs[self.agents[i]] = ob
             state.append(ob[self.keep_inds])
 
-        if self.reward_scheme == 2:
+        if self.include_highest:
             state.append(np.array([self.highest_y]))  # only include once
-        elif self.reward_scheme == 3:
+        if self.include_time:
             state.append(np.array([self.timestep / self.max_timestep]))  # only include once
         self._state = np.concatenate(state)
 
@@ -258,9 +289,7 @@ class BoxJumpEnvironment(ParallelEnv):
         self._state = None
         self.world = b2World(gravity=(0, self.gravity), doSleep=True)
 
-        # TODO: This should be 0 or None; causes a guaranteed reward of 1 at step 1
-        #  (I don't want to change the reward system post-training)
-        self.highest_y = -1
+        self.highest_y = 0
 
         if self.render_mode == "human" and self.screen is None:
             pygame.init()
@@ -271,16 +300,18 @@ class BoxJumpEnvironment(ParallelEnv):
         self.boxes = []
         total_x = self.spacing * (self.num_boxes - 1)
         x = (W / 2) - (total_x / 2)
-        start_y = FLOOR_Y - self.box_height / 2 - 0.5
+        start_y = FLOOR_Y - self.box_height / 2
         for i in range(self.num_boxes):
-            body = self.world.CreateDynamicBody(position=(x, start_y))
+            xpos = x + self.np_random.uniform(-self.random_spacing, self.random_spacing)
+
+            body = self.world.CreateDynamicBody(position=(xpos, start_y))
             shape = b2PolygonShape(box=(self.box_width / 2, self.box_height / 2))
             body.CreateFixture(shape=shape, density=1, friction=self.friction)
             x += self.spacing
             body.angularDamping = self.angular_damping
             body.fixedRotation = self.fixed_rotation
 
-            body.ApplyForceToCenter((self.np_random.uniform(-150, 150), 0), True)
+            # body.ApplyForceToCenter((self.np_random.uniform(-150, 150), 0), True)
 
             # (a nice blue gradient I made up)
             hue = (i / self.num_boxes) * 0.2 + 0.5
@@ -303,6 +334,8 @@ class BoxJumpEnvironment(ParallelEnv):
         new_best = self.highest_y
         max_height_above_floor = -1
 
+        final_step = (self.timestep + 1) > self.max_timestep
+
         for idx, i in enumerate(self.agents):
             action = actions[i]
             self.boxes[idx].step()
@@ -319,22 +352,70 @@ class BoxJumpEnvironment(ParallelEnv):
 
             # height_above_floor = 0 -> you are on the floor
             # height_above_floor = 1 -> the bottom of your square has just exited the screen off the top
-            height_above_floor = (FLOOR_Y - self.boxes[idx].body.position.y - self.box_height / 2) / FLOOR_Y
-            if height_above_floor > new_best:
+            # height_above_floor = (FLOOR_Y - self.boxes[idx].body.position.y - self.box_height / 2) / FLOOR_Y
+
+            # 0 = you are on the floor
+            # n = you are n boxes in height (so one box standing on another gets a score of 1)
+            height_above_floor = (FLOOR_Y - self.boxes[idx].body.position.y - self.box_height / 2) / self.box_height
+
+            if self.reward_mode == "highest_stable":
+                valid = self.boxes[idx].can_jump()
+            elif self.reward_mode == "highest":
+                valid = True
+            else:
+                # Doesn't matter
+                valid = True
+
+            if height_above_floor > new_best and valid:
                 new_best = height_above_floor
+
             max_height_above_floor = max(max_height_above_floor, height_above_floor)
 
-        for i in self.agents:
-            if self.reward_scheme == 1:
-                rewards[i] = max_height_above_floor / self.num_boxes
-            elif self.reward_scheme == 2:
+        for ind, i in enumerate(self.agents):
+            # Apply fall penalty: single penalty mode
+            # if not self.boxes[ind].fallen:
+            #     height_above_floor = (FLOOR_Y - self.boxes[ind].body.position.y - self.box_height / 2) / self.box_height
+            #     if height_above_floor < NEGATIVE_THRESHOLD:
+            #         rewards[i] = -self.penalty_fall
+            #         self.boxes[ind].fallen = True
+            #         print("A box fell")
+            #         continue
+
+            # Apply fall penalty: every step penalty mode
+            height_above_floor = (FLOOR_Y - self.boxes[ind].body.position.y - self.box_height / 2) / self.box_height
+            if height_above_floor < NEGATIVE_THRESHOLD:
+                rewards[i] = -self.penalty_fall / self.max_timestep
+                self.boxes[ind].fallen = True
+                continue
+
+            if self.reward_mode == "highest" or self.reward_mode == "highest_stable":
                 rewards[i] = (new_best - prev_best) / self.num_boxes
-            elif self.reward_scheme == 3:
-                time = self.timestep / self.max_timestep
-                rewards[i] = time * max_height_above_floor / self.num_boxes
-            elif self.reward_scheme == 4:
-                xs = np.array([b.body.position.x / W for b in self.boxes])
-                rewards[i] = -np.sum((xs - 0.5) ** 2) / (self.num_boxes ** 2)
+            elif self.reward_mode == "height_sq":
+                height_above_floor = (FLOOR_Y - self.boxes[ind].body.position.y - self.box_height / 2) / self.box_height
+                rewards[i] = (height_above_floor ** 2) / self.num_boxes / self.max_timestep
+            elif self.reward_mode == "stable_sum":
+                height_above_floor = (FLOOR_Y - self.boxes[ind].body.position.y - self.box_height / 2) / self.box_height
+                if self.boxes[ind].can_jump():
+                    rewards[i] = 50 * (height_above_floor ** 2) / self.num_boxes / self.max_timestep
+                else:
+                    rewards[i] = 0
+
+                # if final_step:
+                #     rewards[i] += self.highest_y / self.num_boxes
+
+            # if self.reward_scheme == 1:
+            #     rewards[i] = max_height_above_floor / self.num_boxes
+            # elif self.reward_scheme == 2:
+            #     rewards[i] = (new_best - prev_best) / self.num_boxes
+            # elif self.reward_scheme == 3:
+            #     time = self.timestep / self.max_timestep
+            #     rewards[i] = time * max_height_above_floor / self.num_boxes
+            # elif self.reward_scheme == 4:
+            #     height_above_floor = (FLOOR_Y - self.boxes[ind].body.position.y - self.box_height / 2) / self.box_height
+            #     rewards[i] = height_above_floor / self.num_boxes
+
+                # xs = np.array([b.body.position.x / W for b in self.boxes])
+                # rewards[i] = -np.sum((xs - 0.5) ** 2) / (self.num_boxes ** 2)
 
         self.world.Step(1 / FPS, 30, 30)
         self.timestep += 1
@@ -380,6 +461,14 @@ class BoxJumpEnvironment(ParallelEnv):
 
         # Render floor
         pygame.draw.rect(self.screen, (0, 0, 0), (0, FLOOR_Y * SCALE, W * SCALE, (H - FLOOR_Y) * SCALE))
+
+        # Draw line for highest y coordinate
+        # body position y
+        y = FLOOR_Y - self.highest_y * self.box_height # + self.box_height / 2
+        y -= self.box_height
+        y *= SCALE
+        pygame.draw.rect(self.screen, (255, 0, 0), (0, y, W * SCALE, 2))
+        # height_above_floor = (FLOOR_Y - self.boxes[idx].body.position.y - self.box_height / 2) / self.box_height
 
         pygame.display.flip()
 
