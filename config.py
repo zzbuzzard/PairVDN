@@ -45,6 +45,14 @@ class PairVDNConfig(ModelConfig):
 
 
 @dataclass
+class PairWVDNConfig(ModelConfig):
+    hidden_layers: List[int]
+    hidden_dim: int
+    share_params: bool = False
+    random_order: bool = False
+
+
+@dataclass
 class Config:
     model_config: ModelConfig
     model_type: str
@@ -99,6 +107,8 @@ class Config:
             data["model_config"] = IQLConfig(**data["model_config"])
         elif data["model_type"] == "PairVDN":
             data["model_config"] = PairVDNConfig(**data["model_config"])
+        elif data["model_type"] == "PairWVDN":
+            data["model_config"] = PairWVDNConfig(**data["model_config"])
         else:
             raise NotImplementedError(f"Unknown model type '{data['model_type']}'")
 
@@ -130,6 +140,12 @@ class Config:
                                               key, input_dim=input_dim, output_dim=output_dim,
                                               hidden_layers=self.model_config.hidden_layers,
                                               final_layer_small_init=self.final_layer_small_init)
+        elif self.model_type == "PairWVDN":
+            return multiagent_network.PairWVDN(num_agents, self.model_config.share_params, global_state_dim,
+                                               self.model_config.hidden_dim, self.model_config.random_order,
+                                               key, input_dim=input_dim, output_dim=output_dim,
+                                               hidden_layers=self.model_config.hidden_layers,
+                                               final_layer_small_init=self.final_layer_small_init)
         else:
             raise NotImplementedError(f"Unknown model '{self.model_type}'.")
 

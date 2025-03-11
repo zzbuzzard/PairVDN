@@ -8,6 +8,7 @@ from equinox import nn
 from jaxtyping import Array, Float, PyTree
 from typing import List
 from abc import ABC, abstractmethod
+from functools import partial
 
 import util
 
@@ -45,7 +46,7 @@ class QMLP(QFunc):
     def __init__(self, input_dim: int, output_dim: int, hidden_layers: List[int], final_layer_small_init: bool, key):
         assert len(hidden_layers) >= 1
         super().__init__()
-        activation = jax.nn.relu
+        activation = partial(jax.nn.leaky_relu, negative_slope=0.01)
 
         sizes = [input_dim] + hidden_layers + [output_dim]
         layers = []
@@ -53,9 +54,10 @@ class QMLP(QFunc):
         for i in range(len(sizes) - 1):
             key, key2 = random.split(key)
             layers.append(nn.Linear(sizes[i], sizes[i+1], key=key2))
+            layers.append(nn.LayerNorm(int(sizes[i+1]), use_weight=False, use_bias=False))
             layers.append(activation)
 
-        self.layers = layers[:-1]  # remove trailing activation
+        self.layers = layers[:-2]  # remove trailing activation and norm
 
         if final_layer_small_init:
             self.layers[-1] = util.small_init(self.layers[-1], mul=0.01)
@@ -66,15 +68,19 @@ class QMLP(QFunc):
             x = f(x)
         return x
 
+    @jax.vmap
+    def vmap_call(self, x):
+        return self(x)
+
     def argmax(self, obs, gstate=None):
-        q_values = vmap(self.__call__)(obs)  # B x A
+        q_values = self.vmap_call(obs)  # B x A
         return jnp.argmax(q_values, axis=-1)  # B
 
     def evaluate(self, obs, actions, gstate=None):
-        q_values = vmap(self.__call__)(obs)  # B x A
+        q_values = self.vmap_call(obs)  # B x A
         batch_size = obs.shape[0]  # = B
         return q_values[jnp.arange(batch_size), actions]  # B
 
     def max(self, obs, gstate=None):
-        q_values = vmap(self.__call__)(obs)  # B x A
+        q_values = self.vmap_call(obs)  # B x A
         return jnp.max(q_values, axis=-1)  # B

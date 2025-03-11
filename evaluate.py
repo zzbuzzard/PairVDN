@@ -230,15 +230,16 @@ if __name__ == "__main__":
 
     print("Repeats:", args.num_repeats)
 
-    if is_marl:
-        r, s, _ = evaluate_multi_agent(config, 0, q_policy, args.num_repeats, agent_names)
-        print(f"Score {r:.4f} +- {s:.3f}")
-    else:
-        r, s = evaluate(config, 0, q_policy, args.num_repeats)
-        print(f"(parallel) Score {r:.2f} +- {s:.1f}")
+    if args.num_repeats > 0:
+        if is_marl:
+            r, s, _ = evaluate_multi_agent(config, 0, q_policy, args.num_repeats, agent_names)
+            print(f"Score {r:.4f} +- {s:.3f}")
+        else:
+            r, s = evaluate(config, 0, q_policy, args.num_repeats)
+            print(f"(parallel) Score {r:.2f} +- {s:.1f}")
 
-        r, s = evaluate_sequential(config, 0, q_policy, args.num_repeats)
-        print(f"(sequential) Score {r:.2f} +- {s:.1f}")
+            r, s = evaluate_sequential(config, 0, q_policy, args.num_repeats)
+            print(f"(sequential) Score {r:.2f} +- {s:.1f}")
 
     # Then run infinite games for fun
     if is_marl:

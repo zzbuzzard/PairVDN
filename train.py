@@ -98,7 +98,7 @@ if __name__ == "__main__":
     wandb.init(
         project="RL_Project",
         name=args.root,
-        config=asdict(config)
+        config=asdict(config),
     )
 
     envs = gym.vector.make(config.env, config.num_envs, asynchronous=True)

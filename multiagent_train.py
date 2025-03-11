@@ -33,6 +33,8 @@ def collect_data(key, env: pettingzoo.ParallelEnv, policy: Policy, buffer: Exper
     obs_dict, _ = env.reset(seed=config.seed + num_runs)
     obs_dict = util.value_map(obs_dict, obs_map)
     gs0 = env.state()
+
+    start_runs = num_runs
     num_runs += 1
 
     for _ in range(steps):
@@ -253,6 +255,9 @@ if __name__ == "__main__":
             avg_reward, std_reward, mean_q = evaluate.evaluate_multi_agent(config, seed=epoch, policy=q_policy, repeats=config.eval_reps, agent_names=agent_names)
             print(f"Evaluation completed. Took {time.time() - start:.3f}s")
 
+            print(f"Reward: {avg_reward:.4f} +- {std_reward:.4f}")
+            print(f"Mean Q: {mean_q:.4f}")
+
             stats["avg_reward"][epoch] = avg_reward
             stats["std_reward"][epoch] = std_reward
             stats["mean_q"][epoch] = mean_q
@@ -267,6 +272,9 @@ if __name__ == "__main__":
             if config.model_type == "PairVDN":
                 gc.collect()
                 jax.clear_caches()
+
+            util.plot_reward(stats)
+            util.plot_loss(stats)
 
     # Save final model
     util.save_model(root_dir, model)

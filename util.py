@@ -179,3 +179,9 @@ def custom_init(linear_layer, weight_size, bias_size, key):
     new_bias = jax.random.uniform(key, linear_layer.bias.shape, linear_layer.bias.dtype, -bias_size, bias_size)
     return update_parameters(linear_layer, ["weight", "bias"], [new_weight, new_bias])
 
+
+# Note: expects x to be flat i.e. not batched
+def layer_norm(x):
+    x = x - jnp.mean(x)
+    x = x / jnp.std(x)
+    return x
