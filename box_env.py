@@ -71,19 +71,44 @@ FLOOR_Y = 15
 class BoxJumpEnvironment(ParallelEnv):
     """
     Reward modes:
-        highest - reward only given if a new best height is achieved this frame
+        highest        - reward at time t = max(new best height - old best height, 0)
+                         meaning rewards are given when a new best height is achieved in the current frame
         highest_stable - same as highest but only considers boxes which are stable i.e. not mid-jump
-        height_sq - each agent rewarded by its current height squared at each step
+        height_sq      - each agent rewarded by its current height squared at each step
+        stable_sum     - same as height_sq but reward is 0 for agents which are currently falling. multiplied by 50 to
+                          achieve a similar order of magnitude to height_sq.
+
+        A total reward (with highest mode) of N means that a height of N boxes above the floor was achieved.
     """
 
     metadata = {
-        "name": "custom_environment_v0",
+        "name": "boxjump_v0",
     }
 
     def __init__(self, num_boxes=4, world_width=10, world_height=6, box_width=1, box_height=1, render_mode=None,
                  gravity=10, friction=0.8, spacing=1.5, random_spacing=0.5, angular_damping=1, agent_one_hot=False,
                  max_timestep=400, fixed_rotation=False, reward_mode: str = "highest", include_time: bool = True,
                  include_highest: bool = True, penalty_fall: float = 20):
+        """
+        :param num_boxes: Number of agents.
+        :param world_width:Environment width.
+        :param world_height: Environment height.
+        :param box_width: Width of each agent.
+        :param box_height: Height of each agent.
+        :param render_mode: None or "human" - None does not render, while "human" uses PyGame to render.
+        :param gravity: Gravity force.
+        :param friction: Friction force.
+        :param spacing: Horizontal spacing at environment start.
+        :param random_spacing: Randomness in horizontal spacing at environment start (shouldn't be over half spacing, or overlaps will occur).
+        :param angular_damping: Angular damping to prevent too much spinning.
+        :param agent_one_hot: Whether or not to include one-hot agent representations in the observations.
+        :param max_timestep: Length of an episode.
+        :param fixed_rotation: If true, the boxes cannot rotate. This makes the environment a lot easier.
+        :param reward_mode: highest / highest_stable / height_sq / stable_sum. See BoxJumpEnvironment docstring.
+        :param include_time: Whether to include the elapsed time (normalised 0 to 1) in the observations.
+        :param include_highest: Whether to include the best height achieved so far in the observations.
+        :param penalty_fall: How much of a reward penalty should be given for falling off the edge of the map. Applied every step (divided by max_timestep) to agents off the edge.
+        """
         self.num_boxes = num_boxes
         self.width = world_width
         self.height = world_height
