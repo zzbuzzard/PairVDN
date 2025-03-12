@@ -18,6 +18,10 @@ The codebase uses `wandb`, which you may disable with the environment variable `
 
 
 ## Usage
+<p align="center"">
+    <img src="assets/preview_gif.gif" width="50%"/>
+</p>
+
 First, create a model folder and `config.json` in the `models` directory. Examples - and pre-trained models -  for the Box Jump environment
 with 8 agents can be found under `models/box_8/[model_type]`. Then, to train, run multiagent_train.py,
 specifying the config path with `-r`, for example
