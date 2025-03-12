@@ -99,7 +99,7 @@ def evaluate_multi_agent(config: Config, seed: int, policy: Policy, repeats: int
         all_obs = np.concatenate([obs_dict[i][None] for i in agent_names])
         all_actions = policy.get_action(all_obs, k, gstate=gs0)
         qvalue = policy.network.evaluate(all_obs, all_actions, gstate=gs0)  # TODO: unnecessary double network eval
-        agg_qval.append(qvalue)
+        agg_qval.append(float(qvalue.mean()))
 
         action_dict = {name: a.item() for name, a in zip(agent_names, all_actions)}
 
