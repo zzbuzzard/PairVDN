@@ -5,7 +5,8 @@
 </p>
 
 This is the codebase for PairVDN, and is minimally implemented from scratch in jax (with equinox).
-It also contains the implementation of our custom environment Box Jump (`box_env.py`).
+
+If you are looking for the Box Jump environment, please go to the [boxjump repo](https://github.com/zzbuzzard/boxjump) instead.
 
 
 ## Setup
@@ -32,7 +33,7 @@ or, to evaluate (and visualise agent behaviour),
 ```
 python evaluate.py -r box_8/pvdn -n 1 --max_timestep 1000
 ```
-where `-n` indicates the number of episodes to ues for evaluation. Following calculation,
+where `-n` indicates the number of episodes to use for evaluation. Following calculation,
 episodes are repeatedly visualised using PyGame. As this particular model is provided in the repo, this exact command should work already.
 
 To view the box jump environment with random agent behaviour, just run
