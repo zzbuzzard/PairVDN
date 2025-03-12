@@ -22,7 +22,7 @@ python multiagent_train.py -r box_8/pvdn
 ```
 or, to evaluate (and visualise agent behaviour),
 ```
-python evaluate.py -r box_8/pvdn  -n 1 --max_timestep 1000
+python evaluate.py -r box_8/pvdn -n 1 --max_timestep 1000
 ```
 where `-n` indicates the number of episodes to ues for evaluation. Following calculation,
 episodes are repeatedly visualised using PyGame. As this particular model is provided in the repo, this exact command should work already.
