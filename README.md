@@ -1,5 +1,9 @@
 # PairVDN - Pair-wise Decomposed Value Functions
 
+<p align="center"">
+    <img src="assets/PairVDN.png" width="50%"/>
+</p>
+
 This is the codebase for PairVDN, and is minimally implemented from scratch in jax (with equinox).
 It also contains the implementation of our custom environment Box Jump (`box_env.py`).
 
