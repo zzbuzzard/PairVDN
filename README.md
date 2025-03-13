@@ -5,7 +5,11 @@
     <img src="assets/PairVDN.png" width="50%"/>
 </p>
 
-This is the codebase for PairVDN, and is minimally implemented from scratch in jax (with equinox).
+This is the codebase for PairVDN, and is minimally implemented from scratch in JAX (with equinox).
+PairVDN is a method for applying deep Q-learning to multi-agent reinforcement learning (MARL),
+using a novel decomposition of the joint value function into _n_ agent pairwise value functions.
+This allows for improved expressivity, and enhanced cooperation between agents due to the improved
+representation of the value of a joint action (rather than viewing each action in isolation).
 
 If you are looking for the Box Jump environment, please go to the [boxjump repo](https://github.com/zzbuzzard/boxjump) instead.
 
