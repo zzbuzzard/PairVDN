@@ -1,4 +1,5 @@
 # PairVDN - Pair-wise Decomposed Value Functions
+### Access the paper [here](https://arxiv.org/pdf/2503.09521).
 
 <p align="center"">
     <img src="assets/PairVDN.png" width="50%"/>
@@ -54,3 +55,13 @@ models/
 where each `config.json` contains information corresponding to the `Config` object in `config.py`,
 and replaces  command line arguments. As the models are pretty small, I've included a bunch in the repo, 
 so you should be able to run evaluation and view behaviour as well as reward etc stats.
+
+## Citation
+```
+@article{buzzard2025pairvdn,
+      title={PairVDN - Pair-wise Decomposed Value Functions}, 
+      author={Zak Buzzard},
+      year={2025},
+      url={https://arxiv.org/abs/2503.09521}, 
+}
+```
